@@ -24,17 +24,38 @@ type ExampleReply struct {
 
 
 // Add your RPC definitions here.
+//请求Map任务args
 type CallForMapTaskArgs struct {
 
 	Test int
 
 }
-
-type  CallForMapTaskReply	struct {
-	FileName string			//返回的文件名
-	TaskId 	int 			//返回的任务编号
+//请求Map任务reply
+type  CallForMapTaskReplyArgs struct {
+	FileName string //返回的文件名
+	TaskId   int    //返回的任务编号
 }
 
+//请求Map完成args
+type CallForMapFinishArgs struct{
+	FileNames []string
+	TaskId int
+}
+//请求Map完成reply
+type CallForMapFinishReplyArgs struct{
+	Ok bool
+}
+
+//请求reduce任务args
+type CallForReduceTaskArgs struct {
+	ReduceId int
+}
+
+//请求reduce任务reply
+type  CallForReduceTaskReplyArgs struct {
+	ReduceFileNames []string
+	Ok              bool
+}
 
 
 

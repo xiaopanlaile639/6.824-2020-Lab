@@ -1,6 +1,10 @@
 package mr
 
-import "log"
+import (
+	"log"
+	"strconv"
+	"sync"
+)
 import "net"
 import "os"
 import "net/rpc"
@@ -11,6 +15,10 @@ type Master struct {
 	// Your definitions here.
 	UnfinFileName []string
 	MapIds        int
+
+	InterFiles []string
+	InterFilesLock  sync.Mutex
+
 	//interMide
 
 }
@@ -27,7 +35,8 @@ func (m *Master) Example(args *ExampleArgs, reply *ExampleReply) error {
 	return nil
 }
 
-func (m*Master) ReplyForMapTask(args * CallForMapTaskArgs,reply * CallForMapTaskReply)error {
+//响应Map任务请求
+func (m*Master) ReplyForMapTask(args * CallForMapTaskArgs,reply *CallForMapTaskReplyArgs)error {
 
 	if len(m.UnfinFileName) != 0 {
 		reply.FileName = m.UnfinFileName[0]
@@ -45,8 +54,42 @@ func (m*Master) ReplyForMapTask(args * CallForMapTaskArgs,reply * CallForMapTask
 
 }
 
+//响应MapWorker结束的任务
+func (m*Master) ReplyForMapFinish(args * CallForMapFinishArgs,reply *CallForMapFinishReplyArgs)error {
 
+	if len(args.FileNames ) != 0{
 
+		m.InterFilesLock.Lock()
+		m.InterFiles = append(m.InterFiles,args.FileNames...)		//互斥添加到中间文件中去
+		m.InterFilesLock.Unlock()
+
+	}
+
+	reply.Ok = true
+
+	return nil
+}
+
+//响应Reduce请求
+func (m*Master) ReplyForReduceTask(args* CallForReduceTaskArgs,reply *CallForReduceTaskReplyArgs ) error{
+
+	reduceId:=args.ReduceId			//请求的reduceId
+
+	m.InterFilesLock.Lock()
+
+	for _,interFileName:= range m.InterFiles{
+
+		tmpReduceId,_ := strconv.Atoi(string(interFileName[5]))
+
+		if tmpReduceId == reduceId {
+			reply.ReduceFileNames = append(reply.ReduceFileNames,interFileName)
+		}
+	}
+	reply.Ok = true
+	m.InterFilesLock.Unlock()
+
+	return nil
+}
 
 //
 // start a thread that listens for RPCs from worker.go
@@ -72,6 +115,7 @@ func (m *Master) Done() bool {
 	ret := false
 
 	// Your code here.
+	//Worker()
 
 
 	return ret
