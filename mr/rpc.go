@@ -22,42 +22,79 @@ type ExampleReply struct {
 	Y int
 }
 
-
 // Add your RPC definitions here.
 //请求Map任务args
 type CallForMapTaskArgs struct {
-
-	Test int
-
+	TestPid int
 }
+
 //请求Map任务reply
-type  CallForMapTaskReplyArgs struct {
+type CallForMapTaskReplyArgs struct {
 	FileName string //返回的文件名
-	TaskId   int    //返回的任务编号
+	MapId    int    //返回的任务编号
 }
 
 //请求Map完成args
-type CallForMapFinishArgs struct{
+type CallForMapFinishArgs struct {
 	FileNames []string
-	TaskId int
+	MapId     int
 }
+
 //请求Map完成reply
-type CallForMapFinishReplyArgs struct{
+type CallForMapFinishReplyArgs struct {
 	Ok bool
+}
+
+//请求是否全部Map任务都已运行结束
+type CallForAllMapFinishArgs struct {
+	MapId int
+}
+
+type CallForAllMapFinishReplyArgs struct {
+	IsFinished bool
+	Ok         bool
 }
 
 //请求reduce任务args
 type CallForReduceTaskArgs struct {
 	ReduceId int
+	//TestPid int
 }
 
 //请求reduce任务reply
-type  CallForReduceTaskReplyArgs struct {
+type CallForReduceTaskReplyArgs struct {
+	ReduceId        int
 	ReduceFileNames []string
 	Ok              bool
 }
 
+//请求返回 完成的Reduce任务编号
+type CallForReduceFinishArgs struct {
+	ReduceId int
+}
 
+type CallForReduceFinishReplyArgs struct {
+	OK bool
+}
+
+//请求是否所有的Reduce任务都已经完成
+type CallForAllReduceFinishArgs struct {
+	MapId int
+}
+
+type CallForAllReduceFinishReplyArgs struct {
+	IsFinished bool
+	Ok         bool
+}
+
+//同时Master所有任务均已完成
+type CallForAllTaskFinishArgs struct {
+	Test int
+}
+
+type CallForAllTaskFinishReplyArgs struct {
+	Test int
+}
 
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the master.

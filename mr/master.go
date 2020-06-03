@@ -1,6 +1,7 @@
 package mr
 
 import (
+	"fmt"
 	"log"
 	"strconv"
 	"sync"
@@ -10,83 +11,198 @@ import "os"
 import "net/rpc"
 import "net/http"
 
+//type  MapTask struct {
+//	MapId int
+//	FileName string
+//}
+
+const (
+	NOTALLOCATED int = -1
+	RUNNING      int = 0
+	FINISHED     int = 1
+)
+
+type MapTasks struct {
+	TaskFileName string
+	status       int
+}
 
 type Master struct {
 	// Your definitions here.
-	UnfinFileName []string
-	MapIds        int
+	AllMapTask []MapTasks //所有的Map任务
 
-	InterFiles []string
-	InterFilesLock  sync.Mutex
+	AllReduceTask []int //Reduce任务
+	InterFiles    []string
 
-	//interMide
+	//NextMapId	int
+	//MapIds        int
+
+	AllTaskFinished bool //所有任务是否全部结束
+
+	MasterLock sync.Mutex //互斥锁
 
 }
 
 // Your code here -- RPC handlers for the worker to call.
-
-//
-// an example RPC handler.
-//
-// the RPC argument and reply types are defined in rpc.go.
-//
-func (m *Master) Example(args *ExampleArgs, reply *ExampleReply) error {
-	reply.Y = args.X + 1
-	return nil
-}
-
 //响应Map任务请求
-func (m*Master) ReplyForMapTask(args * CallForMapTaskArgs,reply *CallForMapTaskReplyArgs)error {
+func (m *Master) ReplyForMapTask(args *CallForMapTaskArgs, reply *CallForMapTaskReplyArgs) error {
 
-	if len(m.UnfinFileName) != 0 {
-		reply.FileName = m.UnfinFileName[0]
-		reply.TaskId = m.MapIds +1
+	reply.FileName = "" //默认返回是空的
+	reply.MapId = -1
 
-		m.UnfinFileName = m.UnfinFileName[1:] //去掉已分配的第0个文件
-		m.MapIds +=1                          //任务号加1
+	m.MasterLock.Lock()
 
+	//遍历寻找未分配的任务
+	for mapId, mapTask := range m.AllMapTask {
 
-	} else {
-		reply.FileName =""			//返回空字符串
+		fmt.Printf("pid:%v--mapId:%v--mapTask:%v--status:%v\n", args.TestPid, mapId, mapTask, NOTALLOCATED)
+
+		if mapTask.status == NOTALLOCATED { //未分配
+
+			fmt.Printf("allocate mapid:%v to pid:%v\n", mapId, args.TestPid)
+
+			reply.MapId = mapId
+			reply.FileName = mapTask.TaskFileName
+
+			m.AllMapTask[mapId].status = RUNNING //已分配，正在运行中
+
+			break
+		}
 	}
+
+	m.MasterLock.Unlock()
 
 	return nil
 
 }
 
 //响应MapWorker结束的任务
-func (m*Master) ReplyForMapFinish(args * CallForMapFinishArgs,reply *CallForMapFinishReplyArgs)error {
+func (m *Master) ReplyForMapFinish(args *CallForMapFinishArgs, reply *CallForMapFinishReplyArgs) error {
 
-	if len(args.FileNames ) != 0{
+	//if len(args.FileNames ) != 0{
 
-		m.InterFilesLock.Lock()
-		m.InterFiles = append(m.InterFiles,args.FileNames...)		//互斥添加到中间文件中去
-		m.InterFilesLock.Unlock()
+	m.MasterLock.Lock()
 
+	MapId := args.MapId //完成任务的MapID号
+
+	//m.CurReduceTask[MapId] = true
+	m.AllMapTask[MapId].status = FINISHED //已完成
+
+	m.InterFiles = append(m.InterFiles, args.FileNames...) //互斥添加到中间文件中去
+	m.MasterLock.Unlock()
+
+	//}
+
+	reply.Ok = true
+	return nil
+}
+
+//请求是否Map任务都结束了
+func (m *Master) ReplyForAllMapFinish(args *CallForAllMapFinishArgs, reply *CallForAllMapFinishReplyArgs) error {
+
+	reply.IsFinished = true
+
+	m.MasterLock.Lock()
+
+	for i, mapTask := range m.AllMapTask {
+
+		if mapTask.status != FINISHED {
+			reply.IsFinished = false //有任务未结束，需要重新分配
+
+			m.AllMapTask[i].status = NOTALLOCATED //需要重新分配
+			break
+		}
 	}
+
+	m.MasterLock.Unlock()
 
 	reply.Ok = true
 
 	return nil
+
 }
 
 //响应Reduce请求
-func (m*Master) ReplyForReduceTask(args* CallForReduceTaskArgs,reply *CallForReduceTaskReplyArgs ) error{
+func (m *Master) ReplyForReduceTask(args *CallForReduceTaskArgs, reply *CallForReduceTaskReplyArgs) error {
 
-	reduceId:=args.ReduceId			//请求的reduceId
+	reply.Ok = false //默认分配失败
+	reply.ReduceId = -1
 
-	m.InterFilesLock.Lock()
+	m.MasterLock.Lock()
 
-	for _,interFileName:= range m.InterFiles{
+	//分配Reduce编号
+	for reduceId, status := range m.AllReduceTask {
+		if status == NOTALLOCATED { //未分配
 
-		tmpReduceId,_ := strconv.Atoi(string(interFileName[5]))
-
-		if tmpReduceId == reduceId {
-			reply.ReduceFileNames = append(reply.ReduceFileNames,interFileName)
+			m.AllReduceTask[reduceId] = RUNNING //已分配，运行中
+			reply.Ok = true
+			reply.ReduceId = reduceId
+			break
 		}
 	}
+
+	if reply.ReduceId != -1 { //已分配ReduceId
+		//分配具体的文件
+		for _, interFileName := range m.InterFiles {
+
+			idInFileNameIndex := len(interFileName) - 1 //文件名中的ReduceId号
+			tmpReduceId, _ := strconv.Atoi(string(interFileName[idInFileNameIndex]))
+
+			if tmpReduceId == reply.ReduceId { //文件名中的ReduceId号和已分配的ID号相同
+				reply.ReduceFileNames = append(reply.ReduceFileNames, interFileName)
+			}
+
+		}
+	}
+
+	m.MasterLock.Unlock()
+
+	return nil
+}
+
+//标记reduceId的任务完成
+func (m *Master) ReplyForReduceFinish(args *CallForReduceFinishArgs, reply *CallForReduceFinishReplyArgs) error {
+
+	reply.OK = true
+	reduceId := args.ReduceId
+
+	m.MasterLock.Lock()
+
+	m.AllReduceTask[reduceId] = FINISHED //此编号为ReduceId的任务完成
+
+	m.MasterLock.Unlock()
+
+	return nil
+
+}
+
+//回复是否所有的Reduce任务都已经完成
+func (m *Master) ReplyForAllReduceFinish(args *CallForAllReduceFinishArgs, reply *CallForAllReduceFinishReplyArgs) error {
+
+	reply.IsFinished = true
 	reply.Ok = true
-	m.InterFilesLock.Unlock()
+
+	m.MasterLock.Lock()
+	for i, reduceTaskStatus := range m.AllReduceTask {
+
+		if reduceTaskStatus != FINISHED {
+			reply.IsFinished = false
+			m.AllReduceTask[i] = NOTALLOCATED //等待重新分配
+			break
+		}
+	}
+
+	m.MasterLock.Unlock()
+
+	return nil
+}
+
+//不使用参数，无返回值，只是标记所有任务均已完成
+func (m *Master) ReplyForAllTaskFinish(args *CallForAllTaskFinishArgs, reply *CallForAllTaskFinishReplyArgs) error {
+
+	m.MasterLock.Lock()
+	m.AllTaskFinished = true //标记所有任务均已完成
+	m.MasterLock.Unlock()
 
 	return nil
 }
@@ -115,8 +231,12 @@ func (m *Master) Done() bool {
 	ret := false
 
 	// Your code here.
-	//Worker()
 
+	m.MasterLock.Lock()
+
+	ret = m.AllTaskFinished
+
+	m.MasterLock.Unlock()
 
 	return ret
 }
@@ -131,12 +251,25 @@ func MakeMaster(files []string, nReduce int) *Master {
 
 	// Your code here.
 
-	m.UnfinFileName = files[:]
-	m.MapIds = 0
-	//m.mapids = make([]int,10,20)
+	m.MasterLock.Lock()
 
+	//初始化传递进来的所有input文件名，map task的输入
+	for _, fileName := range files {
+		tmpMapTasks := MapTasks{fileName, NOTALLOCATED} //-1代表任务未分配
 
+		m.AllMapTask = append(m.AllMapTask, tmpMapTasks)
+	}
 
+	m.AllReduceTask = make([]int, 10)
+
+	//初始化Reduce任务
+	for i := 0; i < nReduce; i++ {
+		m.AllReduceTask[i] = NOTALLOCATED //Reduce任务未分配
+	}
+
+	m.AllTaskFinished = false //初始化任务未完成
+
+	m.MasterLock.Unlock()
 
 	m.server()
 	return &m
