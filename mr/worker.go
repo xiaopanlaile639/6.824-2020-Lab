@@ -26,16 +26,12 @@ type KeyValue struct {
 	Value string
 }
 
+//中间数据
 type IntermidData struct {
 	Intermediate []KeyValue
-	InterLock    sync.Mutex //保护中间数据的锁
+//	InterLock    sync.Mutex //保护中间数据的锁
 }
 
-//用户函数
-type WorkFunc struct {
-	mapf    func(string, string) []KeyValue //map函数
-	reducef func(string, []string) string   //Reduce函数
-}
 
 type ByKey []KeyValue
 
@@ -82,7 +78,6 @@ func MapWorker(mapf func(string, string) []KeyValue, fileName string, MapId int)
 		fmt.Printf("mapTask：%v finished.\n", MapId)
 		CallForMapFinishReply(outFileNames, MapId) //返回给master写入的文件名信息
 	}
-
 	return nil
 
 }
@@ -111,11 +106,8 @@ func WriteToIntFile(mapInterData []KeyValue, mapId int) (bool, []string) {
 		if len(tmpKeyVals) > reduceNum {
 
 			tmpKeyVals = tmpKeyVals[reduceNum:] //从第reduceNum开始为第一个元素
-
 			reduceId := ihash(tmpKeyVals[0].Key) % reduceNum
-
 			outFileName := "mr-" + strconv.Itoa(mapId) + "-" + strconv.Itoa(reduceId) //拼接输出的文件名 mr-X-Y
-
 			outFile, _ := os.OpenFile(outFileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0777)
 			enc := json.NewEncoder(outFile)
 
@@ -131,12 +123,12 @@ func WriteToIntFile(mapInterData []KeyValue, mapId int) (bool, []string) {
 			outFile.Close()
 			outFileNames = append(outFileNames, outFileName)
 		}
-
 	}
 
 	return true, outFileNames
 }
 
+//reducer的任务详情
 func ReduceWork(reducef func(string, []string) string, reduceId int, inputFileNames []string) bool {
 
 	var kva []KeyValue //保存从文件中读入的kv值
@@ -158,14 +150,11 @@ func ReduceWork(reducef func(string, []string) string, reduceId int, inputFileNa
 			if err := dec.Decode(&tmpKv); err != nil {
 				break
 			}
-
 			kva = append(kva, tmpKv...)
 		}
 
-		//fmt.Printf("inputFileName:%v\n",inputFileName)
 		inputFile.Close() //关闭输入文件
 
-		//os.Remove(inputFileName)		//删除中间文件
 	}
 
 	//排序，是key值按照从小到大的顺序
@@ -173,9 +162,6 @@ func ReduceWork(reducef func(string, []string) string, reduceId int, inputFileNa
 
 	//reduce操作后输出到不同的oname文件中去
 	oname := "mr-out-" + strconv.Itoa(reduceId)
-
-	//ofile, _ := os.OpenFile(oname,os.O_WRONLY | os.O_CREATE|os.O_APPEND,0666)
-
 	ofile, err := ioutil.TempFile("./", "mr-out-tmp*") //先写道tmp文件中
 
 	if err != nil {
@@ -195,11 +181,7 @@ func ReduceWork(reducef func(string, []string) string, reduceId int, inputFileNa
 		for k := i; k < j; k++ {
 			values = append(values, kva[k].Value)
 		}
-
-		//fmt.Printf("reduce  test0\n")
 		output := reducef(kva[i].Key, values)
-		//fmt.Printf("reduce  test1\n")
-
 		// this is the correct format for each line of Reduce output.
 
 		fmt.Fprintf(ofile, "%v %v\n", kva[i].Key, output)
@@ -223,79 +205,67 @@ func ReduceWork(reducef func(string, []string) string, reduceId int, inputFileNa
 	return true
 }
 
+
 //
 // main/mrworker.go calls this function.
-//
+//总体的worker调度函数
 func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
 
-	// Your worker implementation here.
 
-	var sleepTime int = 1
-
+	var sleepTime int = 5		//睡眠时间
 	//执行map任务
 	for {
 
 		fileName, taskId, ok := CallForMapTask() //向master申请一个任务
 
 		if ok { //返回成功代表，Map任务还未完全处理完毕
-			pid := os.Getpid()
-
-			fmt.Printf("process: %v-> mapId:%v running....\n", pid, taskId)
-			//go
 			MapWorker(mapf, fileName, taskId) //开启map进程,传入要操作的文件名
-
 			time.Sleep(time.Second * time.Duration(sleepTime))
 
-		} else {
-
-			fmt.Printf("sleep for a while\n")
-			time.Sleep(time.Second * time.Duration(sleepTime)) //任务分配完毕，休息一会儿等待任务执行完毕
+		} else {		//所有的map任务已分派，但是还未完成
 
 			isAllMapTaskFinished := CallForAllMapFinishReply()
-
 			if isAllMapTaskFinished { //如果全部Map任务都结束了，跳出循环继续执行Reduce任务，否则继续循环
 				break
+			}else{
+				fmt.Printf("map:%v sleep for a while\n",taskId)
+				time.Sleep(time.Second * time.Duration(sleepTime)) //任务分配完毕，休息一会儿等待任务执行完毕
 			}
-
 		}
 	}
 
 	fmt.Printf("all map tasks finished!\n")
-
 	fmt.Printf("reduce tasks begin...\n")
 	//此处开始，可以执行reduce操作
 
 	for {
 		reduceId, inputFileNames, ok := CallForReduceTask() //向master请求Reduce任务
 
-		if ok {
+		if ok {		//返回成功代表reduce还未分配结束
 
 			fmt.Printf("ReduceId:%v running....\n", reduceId)
-
-			//go
-
 			ReduceWork(reducef, reduceId, inputFileNames)
 			time.Sleep(time.Second * time.Duration(sleepTime))
 
-		} else {
-
-			fmt.Printf("reduce Id has been allocated，test if they are are finished...\n")
-			fmt.Printf("sleep for a while\n")
-			time.Sleep(time.Second * time.Duration(sleepTime)) //任务分配完毕，休息一会儿等待任务执行完毕
-
+		} else {		//返回失败，代表所有的任务都已经分配结束，但是还未完成
 			isFinished := CallForAllReduceFinishReply() //判断是否全部Reduce任务结束
-
 			if isFinished {
 				break
+			}else{
+				fmt.Printf("reduce:%v sleep for a while\n",reduceId)
+				time.Sleep(time.Second * time.Duration(sleepTime)) //任务分配完毕，休息一会儿等待任务执行完毕
+
 			}
 		}
-
 	}
 
 	fmt.Printf("all reduce tasks finished!\n")
 	CallAllTaskFinished() //通知master，所有任务都已经完成
 
 }
+
+
+//////////////////////////下面是rpc请求//////////////////////////////////////////
 
 //rpc请求一个split，这里返回一个文件名
 func CallForMapTask() (string, int, bool) {
@@ -304,9 +274,7 @@ func CallForMapTask() (string, int, bool) {
 	reply := CallForMapTaskReplyArgs{}
 
 	call("Master.ReplyForMapTask", &args, &reply) //返回是否调用成功
-
 	var ok bool = true
-
 	if reply.FileName == "" { //如果FileName为空的话，说明任务处理完毕，返回false
 		ok = false
 	}
@@ -372,7 +340,6 @@ func CallAllTaskFinished() {
 
 	call("Master.ReplyForAllTaskFinish", &args, &reply)
 
-	//return
 }
 
 //

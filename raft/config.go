@@ -305,12 +305,14 @@ func (cfg *config) checkOneLeader() int {
 		time.Sleep(time.Duration(ms) * time.Millisecond)
 
 		leaders := make(map[int][]int)
+
 		for i := 0; i < cfg.n; i++ {
 			if cfg.connected[i] {
 				if term, leader := cfg.rafts[i].GetState(); leader {
 					leaders[term] = append(leaders[term], i)
 				}
 			}
+
 		}
 
 		lastTermWithLeader := -1
@@ -326,6 +328,7 @@ func (cfg *config) checkOneLeader() int {
 		if len(leaders) != 0 {
 			return leaders[lastTermWithLeader][0]
 		}
+
 	}
 	cfg.t.Fatalf("expected one leader, got none")
 	return -1

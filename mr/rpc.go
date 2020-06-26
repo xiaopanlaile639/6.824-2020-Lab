@@ -9,18 +9,6 @@ package mr
 import "os"
 import "strconv"
 
-//
-// example to show how to declare the arguments
-// and reply for an RPC.
-//
-
-type ExampleArgs struct {
-	X int
-}
-
-type ExampleReply struct {
-	Y int
-}
 
 // Add your RPC definitions here.
 //请求Map任务args
@@ -32,6 +20,8 @@ type CallForMapTaskArgs struct {
 type CallForMapTaskReplyArgs struct {
 	FileName string //返回的文件名
 	MapId    int    //返回的任务编号
+	Ok	bool
+
 }
 
 //请求Map完成args
@@ -94,6 +84,7 @@ type CallForAllTaskFinishArgs struct {
 
 type CallForAllTaskFinishReplyArgs struct {
 	Test int
+	Ok	bool
 }
 
 // Cook up a unique-ish UNIX-domain socket name
