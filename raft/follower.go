@@ -22,7 +22,7 @@ func (rf *Raft) WaitToBecCan(){
 
 			}else{					//延时周期到，follower称为candidate
 
-				DPrintf("%v: elapstime %v waitTime %v",rf.me,rf.elapsTime,rf.waitTime)
+				//DPrintf("%v: elapstime %v waitTime %v",rf.me,rf.elapsTime,rf.waitTime)
 
 				rf.role = CANDIDATE
 				//rf.InitCandidate()			//成为了Candidate
@@ -35,11 +35,15 @@ func (rf *Raft) WaitToBecCan(){
 
 //初始化成为Follower的一些信息
 //注意，进入此函数，应该已经获得了锁
-func (rf* Raft) InitFollower(){
+func (rf* Raft) InitFollowerWithLock(VoteFor int){
 	rf.role = FOLLOWER
 	rf.elapsTime = 0
 	rf.waitTime = rand.Intn(RANDTIME)+FOL_BASE_TIME	//设置下次超时的时间
 
-	//DPrintf("%v init to be follower: elapstime %v waitTime %v",rf.me,rf.elapsTime,rf.waitTime)
+	rf.VoteFor = VoteFor				//初始化成为Follower的时候还未投票
+
+	rf.persist()				//持久化存储
+
+	DPrintf("%v become follower\n",rf.me)
 
 }

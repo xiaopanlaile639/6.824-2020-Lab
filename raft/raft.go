@@ -8,34 +8,35 @@ package raft
 // rf = Make(...)
 //   create a new Raft server.
 // rf.Start(command interface{}) (index, term, isleader)
-//   start agreement on a new log entry
+//   start agreement on a new Logs entry
 // rf.GetState() (term, isLeader)
 //   ask a Raft for its current term, and whether it thinks it is leader
 // ApplyMsg
-//   each time a new entry is committed to the log, each Raft peer
+//   each time a new entry is committed to the Logs, each Raft peer
 //   should send an ApplyMsg to the service (or tester)
 //   in the same server.
 //
 
 import (
+	"bytes"
+
 	"math/rand"
 	"sync"
 	"time"
 )
 import "sync/atomic"
 import "../labrpc"
-
-// import "bytes"
-// import "../labgob"
+ //import "bytes"
+ import "../labgob"
 
 
 
 //
-// as each Raft peer becomes aware that successive log entries are
+// as each Raft peer becomes aware that successive Logs entries are
 // committed, the peer should send an ApplyMsg to the service (or
 // tester) on the same server, via the applyCh passed to Make(). set
 // CommandValid to true to indicate that the ApplyMsg contains a newly
-// committed log entry.
+// committed Logs entry.
 //
 // in Lab 3 you'll want to send other kinds of messages (e.g.,
 // snapshots) on the applyCh; at that point you can add fields to
@@ -52,6 +53,18 @@ const FOL_BASE_TIME = 300
 const CAN_BASE_TIME = 150
 const  RANDTIME = 300
 
+
+//
+// as each Raft peer becomes aware that successive Logs entries are
+// committed, the peer should send an ApplyMsg to the service (or
+// tester) on the same server, via the applyCh passed to Make(). set
+// CommandValid to true to indicate that the ApplyMsg contains a newly
+// committed Logs entry.
+//
+// in Lab 3 you'll want to send other kinds of messages (e.g.,
+// snapshots) on the applyCh; at that point you can add fields to
+// ApplyMsg, but set CommandValid to false for these other uses.
+//
 type ApplyMsg struct {
 	CommandValid bool
 	Command      interface{}
@@ -67,8 +80,8 @@ type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
 	Term	int 	//candidate's term
 	CandidateId	int 	//candidate's requesting vote
-	LastLogIndex	int 	// index of candidate's last log entry
-	LastLogTerm		int 	// term of candidate's last log entry
+	LastLogIndex	int 	// index of candidate's last Logs entry
+	LastLogTerm		int 	// term of candidate's last Logs entry
 
 }
 
@@ -82,21 +95,22 @@ type RequestVoteReply struct {
 	VoteGranted	bool	// true means candidate received vote
 }
 
-//Log entry定义
+//Logs entry定义
 type  LogEntry struct {
 	Term 	int 		//每个log entry都带有term
 	Index 	int			//当前的index
 	Cmd		interface{}		//命令
 
+	//VoteNum	int 			//记录目前接受的投票数量
 
 }
 
 type AppendEntriesArgs struct {
 	Term int			//leader's term
 	LeaderId int 		//so follower can redirect clients
-	PrevLogIndex int	//index of log entry immediately preceding new ones
+	PrevLogIndex int	//index of Logs entry immediately preceding new ones
 	PreLogTerm	int 	//term of PrevLogIndex entry
-	Entries[] 	LogEntry	//log entries to store (empty for heartbeat; may send more than one for efficiency)
+	Entries[] 	LogEntry	//Logs entries to store (empty for heartbeat; may send more than one for efficiency)
 	//Entries 		LogEntry		//默认先处理一条log信息
 	LeaderCommit	int	// leader's commitIndex
 
@@ -124,7 +138,10 @@ type Raft struct {
 	// state a Raft server must maintain.
 
 	role int //当前本server所处的状态：follower、candidate、leader
-	VotelogNum int 		//赞同log的数量
+	applyCh	chan ApplyMsg		//通道用于 applyMsg
+	Applycond *sync.Cond		//条件变量，用于等待apply条件的发生
+
+	//VotelogNum int 		//赞同log的数量
 
 	//follower的相关计时
 	elapsTime			int 			//follower状态周期计时的当前时间
@@ -136,17 +153,17 @@ type Raft struct {
 	voteNum	int		//获取的投票的数量
 
 	//Persistent state on all servers
-	CurrentTerm		int 	//Lastest term server has seen (initialized to 0,increases monotonically)
-	VoteFor			int 	//candidateId that received vote in current term (or null if none)
-	log[]			LogEntry			// log entries; each enray contains command for state machine, and term when entry was received by leader(first index is 1)
+	CurrentTerm int                    //Lastest term server has seen (initialized to 0,increases monotonically)
+	VoteFor     int                    //candidateId that received vote in current term (or null if none)
+	Logs        []			LogEntry // Logs entries; each enray contains command for state machine, and term when entry was received by leader(first index is 1)
 
 	//Volateile state on all  servers
-	CommitIndex		int 	//index of highest log entry known to be committed (initialized to 0, increases monitonically)
-	LastApplied		int 	// index of highest log entry applied to state machine(initialized to 0,increases monotonically)
+	CommitIndex		int 	//index of highest Logs entry known to be committed (initialized to 0, increases monitonically)
+	LastApplied		int 	// index of highest Logs entry applied to state machine(initialized to 0,increases monotonically)
 
 	//volatile  state on leaders
-	NextIndex[]		int		// for each server,index of the next log entry to send to that server (initialized to leader last log index+1)
-	MatchIndex[]	int 	//for each server, index of highest log entry known to be replicated on server(initialized to 0, increases monitonically)
+	NextIndex[]		int		// for each server,index of the next Logs entry to send to that server (initialized to leader last Logs index+1)
+	MatchIndex[]	int 	//for each server, index of highest Logs entry known to be replicated on server(initialized to 0, increases monitonically)
 }
 
 /////////////////////////以上是相关数据结构定义///////////////////////////////////////////////
@@ -178,12 +195,13 @@ func (rf *Raft) GetState() (int, bool) {
 func (rf *Raft) persist() {
 	// Your code here (2C).
 	// Example:
-	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// data := w.Bytes()
-	// rf.persister.SaveRaftState(data)
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.CurrentTerm)
+	e.Encode(rf.VoteFor)
+	e.Encode(rf.Logs)
+	data := w.Bytes()
+	rf.persister.SaveRaftState(data)
 }
 
 
@@ -196,89 +214,118 @@ func (rf *Raft) readPersist(data []byte) {
 	}
 	// Your code here (2C).
 	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := labgob.NewDecoder(r)
-	// var xxx
-	// var yyy
-	// if d.Decode(&xxx) != nil ||
-	//    d.Decode(&yyy) != nil {
-	//   error...
-	// } else {
-	//   rf.xxx = xxx
-	//   rf.yyy = yyy
-	// }
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+
+	var CurTerm int
+	var VoteFor int
+	var Logs[]	LogEntry
+	if d.Decode(&CurTerm) != nil ||  d.Decode(&VoteFor) != nil || d.Decode(&Logs) != nil {
+	  DPrintf("Decode error\n")
+	} else {
+		rf.CurrentTerm = CurTerm
+		rf.VoteFor = VoteFor
+		rf.Logs = Logs
+		DPrintf("Decode OK and recover log is:\n")
+
+		rf.ShowLog()
+	}
 }
 
 //////////////////////////以下是RPC相关处理//////////////////////////////
 
 //处理leader发来的log请求（也有可能是heartbeat消息）
-//？？？follower的最后一条日志，是由哪个变量来记录的？？？
 
 func (rf *Raft) AppendEntries(args * AppendEntriesArgs, reply *AppendEntriesReply) {
+
+	isUpdated := rf.UpdateTerm(args.Term,args.LeaderId) //更新term
+
+	isUpdateCommit := false
+	reply.Success = false
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	//注意，此处还有很多参数未处理
-	if len(args.Entries) == 0{		//log日志长度为0，代表的是heartbeat消息
+	//如果两个term相等，说明有可能在前面的UpdateTerm中进行了修改，即
+	//leader的term大于或等于rf.CurrentTerm,就说明这个rf承认了leader的地位
+	if args.Term == rf.CurrentTerm{
 
-		if args.Term >= rf.CurrentTerm {			//leader的周期大于当前周期
-			rf.CurrentTerm = args.Term
-			rf.InitFollower()		//转化为Followers
+		if isUpdated == false {		//如果未被更新，说明原本就是同一周期
+			rf.InitFollowerWithLock(rf.VoteFor)		//已经投票
+		}
+
+		tmpPrevLogIndex := args.PrevLogIndex		//leader的上一个日志index
+		tmpTerm:=args.PreLogTerm							//leader的上一个日志term
+		logOk:= (tmpPrevLogIndex <len(rf.Logs)) && (rf.Logs[tmpPrevLogIndex].Term == tmpTerm)	///???
+
+		if  logOk{ //index和term都符合
+
+			//DPrintf("leader's(%v) last log match with %v's(%v)\n",args.LeaderId,rf.me,rf.Logs[tmpPrevLogIndex].Cmd)
+
+			//统一处理日志消息和心跳消息
 			reply.Success = true
+			//isConfilct:=false
+			//confilctIndex :=-1
 
-			DPrintf("%v(statue:%v) recv HeartMsg from %v and force to become follower",rf.me,rf.role,args.LeaderId)
-		}else {				//leader的周期小于当前周期
-			reply.Term = rf.CurrentTerm			//返回当前term
-			reply.Success = false
+			DPrintf("before:%v's log len is %v\n",rf.me,len(rf.Logs))
 
-			DPrintf("%v recv HeartMsg from %v and reject it",rf.me,args.LeaderId)
-		}
-	}else {					//处理日志消息
-
-		if args.Term < rf.CurrentTerm{		//leader的term较小
-			reply.Term = rf.CurrentTerm			//返回当前term
-			reply.Success = false
-
-			DPrintf("%v recv AppendingEntries from %v and reject it",rf.me,args.LeaderId)
-		}else{
-			tmpPrevLogIndex := args.PrevLogIndex		//leader的上一个日志index
-			tmpTerm:=args.Term							//leader的上一个日志term
-
-			if rf.CommitIndex < tmpPrevLogIndex{		//follower的log相差leader较多，还没达到Leader的PrevLogIndex
-				reply.Success = false
-
-			}else {
-					if rf.log[tmpPrevLogIndex].Term == tmpTerm { 		//index和term都符合
-						//rf.log[args.PrevLogIndex+1]
-						if cap(rf.log) == tmpPrevLogIndex+1{			//容量不够了
-							rf.log = append(rf.log,args.Entries[0])		//只添加一条log命令
-						}else {											//还有空余容量
-							rf.log[tmpPrevLogIndex+1] = args.Entries[0]		//添加进rf.log
-						}
-
-						//更新rf.CommitIndex为min{args.LeaderCommit,tmpPrevLogIndex}
-						if args.LeaderCommit > tmpPrevLogIndex{
-							rf.CommitIndex = tmpPrevLogIndex
-						}else{
-							rf.CommitIndex = args.LeaderCommit
-						}
-
-						reply.Success = true		//记录成功
-					} else {				//相同的index中存储着不同的term
-
-						rf.CommitIndex = tmpPrevLogIndex-1			//follower的CommitIndex向前移，等待下一次通信时，进行覆盖
-						reply.Success = false
-					}
-				}
+			//统一处理冲突和不冲突（这种方式可能不太好？？？）
+			rf.Logs = rf.Logs[:tmpPrevLogIndex+1]		//PreLogIndex以后的元素都删除
+			DPrintf("mid:%v's log len is %v\n",rf.me,len(rf.Logs))
+			//在这之后添加leader发来的的logs
+			for _,entry := range args.Entries{
+				rf.Logs = append(rf.Logs,entry)
 			}
+
+			DPrintf("after:%v's log len is %v\n",rf.me,len(rf.Logs))
+
+			//更新CommitIndex
+			if args.LeaderCommit > rf.CommitIndex {
+				isUpdateCommit = true
+				tmpLastEntryIndex:= rf.GetLastLogEntryWithLock().Index
+				//tmpLastEntryIndex:=len(rf.Logs)-1
+
+				if tmpLastEntryIndex < args.LeaderCommit{
+					rf.CommitIndex = tmpLastEntryIndex
+				}else {
+					rf.CommitIndex = args.LeaderCommit
+				}
+
+				DPrintf("%v's commitIndex is %v\n",rf.me,rf.CommitIndex)
+
+			}
+
+			rf.persist()			//持久化存储
+
+		}else{
+			DPrintf("leader's(%v) last log not match with %v's\n",args.LeaderId,rf.me)
+			if tmpPrevLogIndex <len(rf.Logs ){
+				//rf.Logs[tmpPrevLogIndex].Term == tmpTerm
+
+				DPrintf("%v's last log is %v, leader's last log index is %v\n",rf.me,rf.Logs[tmpPrevLogIndex].Cmd,tmpPrevLogIndex)
+			}
+
 		}
+	}
+
+	reply.Term = rf.CurrentTerm		//失败、成功返回的Term形式上是一样的
+
+	//异步发送提交消息
+	if isUpdateCommit{
+		rf.Applycond.Signal()
+	}
+
 }
 
 //发送log消息（也有可能是heartbeat消息）给followers
 func (rf *Raft) SendAppendEntries(server int, args * AppendEntriesArgs, reply *AppendEntriesReply)bool {
 
-	DPrintf("%v send HeartMsg to %v",rf.me,server)
+	if len(args.Entries) != 0 {
+		DPrintf("%v(role:%v) send MsgIndex(%v) to %v",rf.me,rf.role,args.PrevLogIndex+1,server)
+	}else {
+		DPrintf("%v(role:%v) send HeartBeat to %v",rf.me,rf.role,server)
+	}
+
 	ok:= rf.peers[server].Call("Raft.AppendEntries", args, reply)
 
 	return ok
@@ -289,12 +336,14 @@ func (rf *Raft) SendAppendEntries(server int, args * AppendEntriesArgs, reply *A
 func (rf *Raft)UpToDate(args *RequestVoteArgs) bool{
 	isNew:=false
 
-	if args.LastLogTerm < rf.log[rf.CommitIndex].Term {
+	tmpLastIndex:=len(rf.Logs)-1
+
+	if args.LastLogTerm < rf.Logs[tmpLastIndex].Term {
 		isNew = false
-	}else if args.LastLogTerm > rf.log[rf.CommitIndex].Term {
+	}else if args.LastLogTerm > rf.Logs[tmpLastIndex].Term {
 		isNew = true
-	}else if args.LastLogTerm == rf.log[rf.CommitIndex].Term {
-		if args.LastLogIndex >= rf.CommitIndex {
+	}else if args.LastLogTerm == rf.Logs[tmpLastIndex].Term {
+		if args.LastLogIndex >= tmpLastIndex {
 			isNew = true
 		}else{
 			return false
@@ -324,7 +373,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		if rf.VoteFor != -1 {			//已经投票了
 			vote = false
 			DPrintf("test3:%v refuse to vote to %v",rf.me,args.CandidateId)
-		}else {
+		}else {			///???
 			vote = true
 			DPrintf("test2:%v vote to %v",rf.me,args.CandidateId)
 		}
@@ -336,20 +385,16 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 			vote = false
 			DPrintf("test5:%v refuse to vote to %v",rf.me,args.CandidateId)
 		}
-
 	}
-
 	if vote {
 		reply.VoteGranted = true		//投票
 
-		rf.CurrentTerm = args.Term		//采取candidate的term
-		rf.VoteFor = args.CandidateId		//本轮次已投票
-		rf.InitFollower()		//转化为Followers
+		rf.CurrentTerm = args.Term    //采取candidate的term
+		rf.InitFollowerWithLock(args.CandidateId)     //转化为Followers,并投票给CandidateId
 	}else{
 		reply.VoteGranted = false		//拒绝投票
 		reply.Term = rf.CurrentTerm		//返回当前周期
 	}
-
 }
 
 //
@@ -390,10 +435,10 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 
 //
 // the service using Raft (e.g. a k/v server) wants to start
-// agreement on the next command to be appended to Raft's log. if this
+// agreement on the next command to be appended to Raft's Logs. if this
 // server isn't the leader, returns false. otherwise start the
 // agreement and return immediately. there is no guarantee that this
-// command will ever be committed to the Raft log, since the leader
+// command will ever be committed to the Raft Logs, since the leader
 // may fail or lose an election. even if the Raft instance has been killed,
 // this function should return gracefully.
 //
@@ -409,32 +454,39 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	// Your code here (2B).
 
 	rf.mu.Lock()
-
 	if rf.role == LEADER {			//只有Leader才接受请求
-		log := LogEntry{
-			Term:  rf.CurrentTerm,
-			Index: 0,
-			Cmd:   command,
-		}
 
-		var logs[] LogEntry
-		logs = append(logs,log)
-
-		//加入自己的log日志中
-		rf.log = append(rf.log,logs[0])		//默认先添加第一条log信息
-		rf.NextIndex[rf.me]++		//更新下一个log的index
-
-		rf.InitBroadcastLog(false)//向其他的follow同步log信息
+		logLen:=len(rf.Logs)
+		DPrintf("%v received cmd(%v-%v-%v) from client\n",rf.me,logLen,rf.CurrentTerm,command)
 
 		//返回的信息
-		index = rf.NextIndex[rf.me]
+		//index = rf.NextIndex[rf.me]		//和下面语句的作用应该一样
+		index = len(rf.Logs)		//此log所在的位置
 		term = rf.CurrentTerm
 		isLeader = true
+		//构造日志
+		log := LogEntry{
+			Term:  rf.CurrentTerm,
+			Index: index,
+			Cmd:   command,
+		}
+		//加入自己的log日志中
+		rf.Logs = append(rf.Logs,log) //添加一条log信息
 
+		rf.persist()
+
+		//以下两个语句不知是否有必要，（leader即是否有必要更新自己的nextIndex和matchIndex）
+		rf.NextIndex[rf.me] = len(rf.Logs)             //更新下一个log的index
+		rf.MatchIndex[rf.me]=rf.NextIndex[rf.me]-1			//更新leader的已复制log标志
+
+
+		rf.mu.Unlock()
+		rf.BroadcastLog(false) //向其他的follow广播log消息
+		rf.mu.Lock()
+	}else {
+		isLeader = false
 	}
-
 	rf.mu.Unlock()
-
 	return index, term, isLeader
 }
 
@@ -474,13 +526,43 @@ func (rf *Raft) RaftRunning(){
 			case CANDIDATE:
 				rf.StartElection()
 			case LEADER:
-			//	rf.mu.Lock()
-				rf.InitBroadcastLog(true)			//周期性发送心跳消息
-			//	rf.mu.Unlock()
-				//rf.PerMsg()
+
+				rf.BroadcastLog(true) //周期性发送心跳消息
+
+				if rf.Role() == LEADER {			//如果角色还是LEADER的话
+					time.Sleep(time.Millisecond*time.Duration(150))		//休眠
+				}
+
 		}
 
-		time.Sleep(time.Millisecond*time.Duration(10))		//休眠tick ms
+		//
+	}
+}
+
+//提交log线程
+func (rf* Raft) doCommit() {
+	for{
+		rf.mu.Lock()
+		//如果CommitIndex<=LastApplied的话，就循环等待???(为啥要循环等待呢)？？？
+		for rf.CommitIndex <= rf.LastApplied {
+			rf.Applycond.Wait()
+		}
+
+		DPrintf("in Commit: %v's log len:%v",rf.me,len(rf.Logs))
+
+		i:=rf.LastApplied+1
+		for ; i<=rf.CommitIndex;i++ {
+			DPrintf("%v apply Index %v(%v)  \n",rf.me,i,rf.Logs[i].Cmd)
+
+			//？？？这里是log[i].Cmd还是log[i-1].Cmd
+			msg:=ApplyMsg{true,rf.Logs[i].Cmd,i}
+			rf.mu.Unlock()
+			rf.applyCh<-msg
+			rf.mu.Lock()
+			rf.LastApplied = i
+		}
+
+		rf.mu.Unlock()
 
 	}
 }
@@ -506,31 +588,82 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	// Your initialization code here (2A, 2B, 2C).
 	//rand.Seed(time.Now().UnixNano())		//设置随机数种子
+	rf.Applycond = sync.NewCond(&rf.mu)		//给条件变量绑定锁
 
+	rf.applyCh = applyCh			//将参数通道复制给rf中
 	rf.VoteFor = -1					//并没参加选举
 	rf.voteNum=0					//初始化投票的数量
+
 	rf.CurrentTerm = 0				//初始化当前term
 	rf.CommitIndex = 0				//初始化CommitIndex
 	rf.LastApplied = 0				//初始化lastApplied
 
-	rand.Seed(time.Now().UnixNano())		//每次从新设置随机数种子
+	rand.Seed(time.Now().UnixNano())		//设置随机数种子
 
 	//初始化第一个log
-	rf.log = append(rf.log,LogEntry{
+	rf.Logs = append(rf.Logs,LogEntry{
 		Term:  0,
 		Index: 0,
-		//Cmd:   "initCmd",
+		Cmd:   "initCmd",
 	})
 
+	DPrintf("%v init...\n",me)
+	rf.role = FOLLOWER
+	rf.elapsTime = 0
+	rf.waitTime = rand.Intn(RANDTIME)+FOL_BASE_TIME	//设置下次超时的时间
 
-
-	rf.InitFollower()			//初始化为Follower
-
-	go rf.RaftRunning()
+	//rf.InitFollowerWithLock(-1) //初始化的时候，不能使用这个函数，因为这个函数中会有持久化操作
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
+	go rf.RaftRunning()			//实例运行
+	go rf.doCommit()			//新开一个提交的单独例程
+
+
 
 	return rf
+}
+
+//互斥返回结点的role
+func (rf* Raft) Role() int {
+	var role int
+	rf.mu.Lock()
+	role = rf.role
+	rf.mu.Unlock()
+	return role
+}
+
+//获得最后一条日志
+//进入此函数时，已经获得锁
+func (rf* Raft) GetLastLogEntryWithLock() LogEntry {
+	entry := LogEntry{}
+	if len(rf.Logs) == 0{
+		entry.Term = rf.CurrentTerm
+		entry.Index = 0
+	} else {
+		entry = rf.Logs[len(rf.Logs) - 1]
+	}
+	return  entry
+}
+
+//更新周期，用于request和response中
+func (rf* Raft) UpdateTerm(term int, server int) bool{
+
+	isUpdated:= false
+	rf.mu.Lock()
+	if term > rf.CurrentTerm {
+		rf.CurrentTerm = term
+		rf.InitFollowerWithLock(server)				//投票给server
+		isUpdated = true
+	}
+	rf.mu.Unlock()
+	return isUpdated		//返回是否进行了term更新，也反映了当前node是否被强制成为了FOLLOWER
+}
+
+func (rf* Raft) ShowLog(){
+
+	for _,log:= range  rf.Logs{
+		DPrintf("node(%v) has log:%v(term) %v(index) %v(cmd)",rf.me,log.Term,log.Index,log.Cmd)
+	}
 }

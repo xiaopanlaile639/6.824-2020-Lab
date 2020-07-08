@@ -23,3 +23,29 @@
 note：当然，这里说是基本上ok的，因为并没有测试很多次，这里只连续测试5次，全部通过，就算ok。 同时，测试结果汇总没有出现下面的错误。（当然，只限于5次之内）
 
 ![image-20200626174706959](D:\Typora\data_img\image-20200626174706959.png)
+
+
+
+# Lab2B
+
+## bug2:
+
+说明：如图在进行agreement despite follower disconnection 测试的时候，为什么会出现还未经过选举，就可以直接发送消息了？如下图中的goroutine 2。
+
+![image-20200707113912745](D:\Typora\data_img\image-20200707113912745.png)
+
+结果：问题解决。之所以一直出现数组越界的情况，是因为未考虑到对leader收到follower重复的log成功返回的情况。如下图：
+
+![image-20200707180613517](D:\Typora\data_img\image-20200707180613517.png)
+
+注释的部分是错误的代码，会导致数组越界，因为它不管充不重复，只要成功nextIndex就往后推，这是不正确的。正确的方式应是向下面的那样，每次从args.PrevLogIndex往后推。
+
+
+
+# Lab2C
+
+## bug3：
+
+说明：已经提交的日志，会出现回退？？？
+
+![image-20200713183115470](D:\Typora\data_img\image-20200713183115470.png)

@@ -16,6 +16,8 @@ func (rf* Raft) InitCandidate(){
 	//设置candidate的超时时间
 	rf.eleWaitTime =  rand.Intn(RANDTIME)+CAN_BASE_TIME//随机设置本term等待的时间：200ms-300ms之间
 
+	rf.persist()				//持久化存储
+
 	DPrintf("%v become candidate",rf.me)
 }
 
@@ -23,45 +25,49 @@ func (rf* Raft) InitCandidate(){
 //向server请求投票
 func (rf*Raft) AskVote(server int, args *RequestVoteArgs, reply *RequestVoteReply ){
 
+	//发送rpc之前的term
+	oriTerm:= args.Term
+
 	if  rf.sendRequestVote(server,args,reply) {		//如果成功返回数据
 
-		rf.mu.Lock()
-		if rf.role == CANDIDATE &&  reply.VoteGranted  { //接受投票
-			rf.voteNum++
-			DPrintf("%v receive vote from %v\n",rf.me,server)
-			if rf.voteNum >= (len( rf.peers) / 2){			//投票人数大于一半（加上自己的一票，只需要》=即可）
-				rf.InitLeader()			//成为新的leader
+		 rf.mu.Lock()
+		if oriTerm == rf.CurrentTerm {		//如果发送rpc期间term没有发生改变
+			if reply.VoteGranted  { //接受投票
 
-				rf.mu.Unlock()
-				rf.InitBroadcastLog(true)	//发送心跳消息通知其他节点，自己成为了leader
-				rf.mu.Lock()
+				if rf.role == CANDIDATE{		//如果还是Candidate，即还未被选为leader
+					rf.voteNum++
+					DPrintf("%v receive vote from %v\n",rf.me,server)
+					if rf.voteNum >= (len( rf.peers) / 2){			//投票人数大于一半（加上自己的一票，只需要》=即可）
+						rf.InitLeaderWithLock() //成为新的leader
 
+						////立即发送一条心跳消息
+						rf.mu.Unlock()
+						rf.BroadcastLog(true) //发送心跳消息通知其他节点，自己成为了leader
+						rf.mu.Lock()
+					}
+				}else{
+					DPrintf("%v is not candidate now, it's role is %v\n",rf.me,rf.role)
+				}
 
-				//rf.InitHeartMsg()
+			}else{			//未获得投票,说明自己的term或者log不是最新的
 
-			}
-		}else{			//未获得投票,说明自己的term或者log不是最新的
+				rf.CurrentTerm = reply.Term
+				rf.InitFollowerWithLock(server) //转化为Followers
 
-			if rf.role != CANDIDATE {
-				DPrintf("%v is not candidate now, it's role is %v\n",rf.me,rf.role)
-			}else{
 				if reply.Term > rf.CurrentTerm {
-					rf.CurrentTerm = reply.Term
-					rf.InitFollower()		//转化为Followers
-
-					DPrintf("reply from %v, %v will forced to be follower\n",server,rf.me)
+					DPrintf("reply(%v)'s term is higher than me(%v)\n",server,rf.me)
 				}else if reply.Term == rf.CurrentTerm{
 					DPrintf("%v's term is equal to me:%v,so no vote\n",server,rf.me)
-				}else{
-					DPrintf("%v's term is smaller than me:%v, something wrong happened\n",server,rf.me)
+				}else{			//term虽然是最新的，但是log不是最新的
+
+					DPrintf("%v's term is smaller than me(%v),but my log is not up to date, ",server,rf.me)
 				}
 			}
 		}
-
 		rf.mu.Unlock()
 	}else{				//未正常返回replay，有可能是因为等待超时(可能是由于网络不通，或者宕机)
 
-		DPrintf("receive no reply(vote) from %v",server)
+		DPrintf("%v receive no reply(vote) from %v",rf.me,server)
 
 	}
 }
@@ -74,18 +80,16 @@ func (rf*Raft) VoteForMe(){
 	//向除了自己的所有节点发送RequestVote消息
 	for i,_:= range rf.peers {
 		if i != rf.me{			//逻辑上需要为自己投票，实际上可以省略
-
 			rf.mu.Lock()
-
 			//请求信息
 			args := RequestVoteArgs{
 				Term:         rf.CurrentTerm,
 				CandidateId:  rf.me,
 			}
 
-			tmpNextIndex := rf.CommitIndex		//上一条日志信息的index
-			args.LastLogIndex = tmpNextIndex
-			args.LastLogTerm = rf.log[tmpNextIndex].Term	//上一条日志信息的term
+			tmpLastIndex :=len(rf.Logs)-1 //上一条日志信息的index
+			args.LastLogIndex = tmpLastIndex
+			args.LastLogTerm = rf.Logs[tmpLastIndex].Term //上一条日志信息的term
 
 			rf.mu.Unlock()
 
@@ -95,7 +99,7 @@ func (rf*Raft) VoteForMe(){
 		}
 	}
 
-	time.Sleep(time.Millisecond*time.Duration(rf.eleWaitTime))		//休息一会等待vote完毕 ms
+
 }
 
 //开始一轮新的选举
@@ -105,6 +109,7 @@ func(rf*Raft) StartElection(){
 	rf.mu.Unlock()
 	rf.VoteForMe()		//向所有的节点发起请求
 
+	time.Sleep(time.Millisecond*time.Duration(rf.eleWaitTime))		//休息一会等待vote完毕 ms
 }
 
 
