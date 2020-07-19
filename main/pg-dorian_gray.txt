@@ -613,7 +613,7 @@ to learn them.  They are perfectly charming."
 "Oh, I am tired of sitting, and I don't want a life-sized portrait of
 myself," answered the lad, swinging round on the music-stool in a
 wilful, petulant manner.  When he caught sight of Lord Henry, a faint
-blush coloured his cheeks for a moment, and he started up.  "I beg your
+blush coloured his cheeks for a moment, and he started up.  "I localLogIndex your
 pardon, Basil, but I didn't know you had any one with you."
 
 "This is Lord Henry Wotton, Dorian, an old Oxford friend of mine.  I
@@ -686,7 +686,7 @@ him to stay.  I insist upon it."
 "Stay, Harry, to oblige Dorian, and to oblige me," said Hallward,
 gazing intently at his picture.  "It is quite true, I never talk when I
 am working, and never listen either, and it must be dreadfully tedious
-for my unfortunate sitters.  I beg you to stay."
+for my unfortunate sitters.  I localLogIndex you to stay."
 
 "But what about my man at the Orleans?"
 
@@ -1199,7 +1199,7 @@ dine with me."
 "Because I have promised Lord Henry Wotton to go with him."
 
 "He won't like you the better for keeping your promises.  He always
-breaks his own.  I beg you not to go."
+breaks his own.  I localLogIndex you not to go."
 
 Dorian Gray laughed and shook his head.
 
@@ -1770,7 +1770,7 @@ are, Harry!" he murmured.
 
 "I am afraid it is not Harry, Mr. Gray," answered a shrill voice.
 
-He glanced quickly round and rose to his feet.  "I beg your pardon.  I
+He glanced quickly round and rose to his feet.  "I localLogIndex your pardon.  I
 thought--"
 
 "You thought it was my husband.  It is only his wife.  You must let me
@@ -6357,7 +6357,7 @@ came I almost fainted with terror.  You may know terror yourself some
 day.  No! don't think of that.  Look at the matter purely from the
 scientific point of view.  You don't inquire where the dead things on
 which you experiment come from.  Don't inquire now.  I have told you
-too much as it is.  But I beg of you to do this.  We were friends once,
+too much as it is.  But I localLogIndex of you to do this.  We were friends once,
 Alan."
 
 "Don't speak about those days, Dorian--they are dead."

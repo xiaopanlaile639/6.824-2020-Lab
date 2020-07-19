@@ -18,7 +18,7 @@ func (rf* Raft) InitCandidate(){
 
 	rf.persist()				//持久化存储
 
-	DPrintf("%v become candidate",rf.me)
+	DPrintf("%v become candidate(%v),it's waitTime is %v",rf.me,rf.CurrentTerm,rf.eleWaitTime)
 }
 
 
@@ -30,8 +30,10 @@ func (rf*Raft) AskVote(server int, args *RequestVoteArgs, reply *RequestVoteRepl
 
 	if  rf.sendRequestVote(server,args,reply) {		//如果成功返回数据
 
-		 rf.mu.Lock()
-		if oriTerm == rf.CurrentTerm {		//如果发送rpc期间term没有发生改变
+		rf.UpdateTerm(reply.Term)			//先更新当前term
+
+		rf.mu.Lock()
+		if oriTerm == rf.CurrentTerm {		//如果term没有发生改变
 			if reply.VoteGranted  { //接受投票
 
 				if rf.role == CANDIDATE{		//如果还是Candidate，即还未被选为leader
@@ -49,20 +51,15 @@ func (rf*Raft) AskVote(server int, args *RequestVoteArgs, reply *RequestVoteRepl
 					DPrintf("%v is not candidate now, it's role is %v\n",rf.me,rf.role)
 				}
 
-			}else{			//未获得投票,说明自己的term或者log不是最新的
+			}else{			//未获得投票,因为log不是最新的
 
-				rf.CurrentTerm = reply.Term
-				rf.InitFollowerWithLock(server) //转化为Followers
+				DPrintf("%v's term is smaller than me(%v),but my log is not up to date, ",server,rf.me)
 
-				if reply.Term > rf.CurrentTerm {
-					DPrintf("reply(%v)'s term is higher than me(%v)\n",server,rf.me)
-				}else if reply.Term == rf.CurrentTerm{
-					DPrintf("%v's term is equal to me:%v,so no vote\n",server,rf.me)
-				}else{			//term虽然是最新的，但是log不是最新的
+				rf.InitFollowerWithLock(-1) //转化为Followers,不投票给任何人
 
-					DPrintf("%v's term is smaller than me(%v),but my log is not up to date, ",server,rf.me)
-				}
 			}
+		}else{	//未获得投票，因为term比较小
+			DPrintf("reply(%v)'s term(%v) is higher than my(%v)'s (%v) \n",server,reply.Term,rf.me,rf.CurrentTerm)
 		}
 		rf.mu.Unlock()
 	}else{				//未正常返回replay，有可能是因为等待超时(可能是由于网络不通，或者宕机)

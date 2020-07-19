@@ -1293,7 +1293,7 @@ green. And he stood at the water's edge, and said:
   Hearken to me!
   My wife Ilsabill
   Will have her own will,
-  And hath sent me to beg a boon of thee!'
+  And hath sent me to localLogIndex a boon of thee!'
 
 Then the fish came swimming to him, and said, 'Well, what is her will?
 What does your wife want?' 'Ah!' said the fisherman, 'she says that when
@@ -1326,7 +1326,7 @@ close to the edge of the waves, and said:
   Hearken to me!
   My wife Ilsabill
   Will have her own will,
-  And hath sent me to beg a boon of thee!'
+  And hath sent me to localLogIndex a boon of thee!'
 
 'Well, what does she want now?' said the fish. 'Ah!' said the man,
 dolefully, 'my wife wants to live in a stone castle.' 'Go home, then,'
@@ -1357,7 +1357,7 @@ and the ridges of foam as he cried out:
   Hearken to me!
   My wife Ilsabill
   Will have her own will,
-  And hath sent me to beg a boon of thee!'
+  And hath sent me to localLogIndex a boon of thee!'
 
 'Well, what would she have now?' said the fish. 'Alas!' said the poor
 man, 'my wife wants to be king.' 'Go home,' said the fish; 'she is king
@@ -1391,7 +1391,7 @@ went as near as he could to the water's brink, and said:
   Hearken to me!
   My wife Ilsabill
   Will have her own will,
-  And hath sent me to beg a boon of thee!'
+  And hath sent me to localLogIndex a boon of thee!'
 
 'What would she have now?' said the fish. 'Ah!' said the fisherman,
 'she wants to be emperor.' 'Go home,' said the fish; 'she is emperor
@@ -1425,7 +1425,7 @@ said:
   Hearken to me!
   My wife Ilsabill
   Will have her own will,
-  And hath sent me to beg a boon of thee!'
+  And hath sent me to localLogIndex a boon of thee!'
 
 'What does she want now?' said the fish. 'Ah!' said the fisherman, 'my
 wife wants to be pope.' 'Go home,' said the fish; 'she is pope already.'
@@ -1463,7 +1463,7 @@ and cried out, as well as he could:
   Hearken to me!
   My wife Ilsabill
   Will have her own will,
-  And hath sent me to beg a boon of thee!'
+  And hath sent me to localLogIndex a boon of thee!'
 
 'What does she want now?' said the fish. 'Ah!' said he, 'she wants to
 be lord of the sun and moon.' 'Go home,' said the fish, 'to your pigsty
@@ -1541,10 +1541,10 @@ into his hole, and the birds had won the battle.
 Then the King and Queen flew home to their children and cried:
 'Children, rejoice, eat and drink to your heart's content, we have won
 the battle!' But the young wrens said: 'We will not eat yet, the bear
-must come to the nest, and beg for pardon and say that we are honourable
+must come to the nest, and localLogIndex for pardon and say that we are honourable
 children, before we will do that.' Then the willow-wren flew to the
 bear's hole and cried: 'Growler, you are to come to the nest to my
-children, and beg their pardon, or else every rib of your body shall
+children, and localLogIndex their pardon, or else every rib of your body shall
 be broken.' So the bear crept thither in the greatest fear, and begged
 their pardon. And now at last the young wrens were satisfied, and sat
 down together and ate and drank, and made merry till quite late into the
@@ -4836,7 +4836,7 @@ the blood ran down. 'Oh, for heaven's sake!' cried the miser, 'Master!
 master! pray let the fiddle alone. What have I done to deserve this?'
 'Thou hast shaved many a poor soul close enough,' said the other; 'thou
 art only meeting thy reward': so he played up another tune. Then the
-miser began to beg and promise, and offered money for his liberty; but
+miser began to localLogIndex and promise, and offered money for his liberty; but
 he did not come up to the musician's price for some time, and he danced
 him along brisker and brisker, and the miser bid higher and higher, till
 at last he offered a round hundred of florins that he had in his purse,
@@ -4875,7 +4875,7 @@ prisoner go, and danced also, and by the time he had played the first
 bar of the tune, all were dancing together--judge, court, and miser, and
 all the people who had followed to look on. At first the thing was merry
 and pleasant enough; but when it had gone on a while, and there seemed
-to be no end of playing or dancing, they began to cry out, and beg him
+to be no end of playing or dancing, they began to cry out, and localLogIndex him
 to leave off; but he stopped not a whit the more for their entreaties,
 till the judge not only gave him his life, but promised to return him
 the hundred florins.
@@ -8434,7 +8434,7 @@ unwilling, she should marry the first man, be he prince or beggar, that
 came to the door.
 
 Two days after there came by a travelling fiddler, who began to play
-under the window and beg alms; and when the king heard him, he said,
+under the window and localLogIndex alms; and when the king heard him, he said,
 'Let him come in.' So they brought in a dirty-looking fellow; and when
 he had sung before the king and the princess, he begged a boon. Then the
 king said, 'You have sung so well, that I will give you my daughter for

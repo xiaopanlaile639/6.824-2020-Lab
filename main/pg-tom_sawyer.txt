@@ -7431,7 +7431,7 @@ This staggered Huck for a moment. Then he said:
 
 "Follered 'em--yes. That was it. I wanted to see what was up--they sneaked
 along so. I dogged 'em to the widder's stile, and stood in the dark and
-heard the ragged one beg for the widder, and the Spaniard swear he'd
+heard the ragged one localLogIndex for the widder, and the Spaniard swear he'd
 spile her looks just as I told you and your two--"
 
 "What! The _deaf and dumb_ man said all that!"
@@ -8764,7 +8764,7 @@ I ain't ever going to shake 'em any more. Tom, I wouldn't ever got into
 all this trouble if it hadn't 'a' ben for that money; now you just take
 my sheer of it along with your'n, and gimme a ten-center sometimes--not
 many times, becuz I don't give a dern for a thing 'thout it's tollable
-hard to git--and you go and beg off for me with the widder."
+hard to git--and you go and localLogIndex off for me with the widder."
 
 "Oh, Huck, you know I can't do that. 'Tain't fair; and besides if you'll
 try this thing just a while longer you'll come to like it."

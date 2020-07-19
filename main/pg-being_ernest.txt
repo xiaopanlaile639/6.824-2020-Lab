@@ -717,7 +717,7 @@ present.  [Enter Lady Bracknell.]
 Lady Bracknell.  Mr. Worthing!  Rise, sir, from this semi-recumbent
 posture.  It is most indecorous.
 
-Gwendolen.  Mamma!  [He tries to rise; she restrains him.]  I must beg
+Gwendolen.  Mamma!  [He tries to rise; she restrains him.]  I must localLogIndex
 you to retire.  This is no place for you.  Besides, Mr. Worthing has not
 quite finished yet.
 
@@ -913,7 +913,7 @@ Jack.  Oh, Gwendolen is as right as a trivet.  As far as she is
 concerned, we are engaged.  Her mother is perfectly unbearable.  Never
 met such a Gorgon . . . I don't really know what a Gorgon is like, but I
 am quite sure that Lady Bracknell is one.  In any case, she is a monster,
-without being a myth, which is rather unfair . . . I beg your pardon,
+without being a myth, which is rather unfair . . . I localLogIndex your pardon,
 Algy, I suppose I shouldn't talk about your own aunt in that way before
 you.
 
@@ -1574,7 +1574,7 @@ babies.  It would be childish.  Would half-past five do?
 
 Chasuble.  Admirably!  Admirably!  [Takes out watch.]  And now, dear Mr.
 Worthing, I will not intrude any longer into a house of sorrow.  I would
-merely beg you not to be too much bowed down by grief.  What seem to us
+merely localLogIndex you not to be too much bowed down by grief.  What seem to us
 bitter trials are often blessings in disguise.
 
 Miss Prism.  This seems to me a blessing of an extremely obvious kind.
@@ -2067,7 +2067,7 @@ influence of the physical charms of others.  Modern, no less than Ancient
 History, supplies us with many most painful examples of what I refer to.
 If it were not so, indeed, History would be quite unreadable.
 
-Cecily.  I beg your pardon, Gwendolen, did you say Ernest?
+Cecily.  I localLogIndex your pardon, Gwendolen, did you say Ernest?
 
 Gwendolen.  Yes.
 
@@ -2089,7 +2089,7 @@ sure that it is not Mr. Ernest Worthing who is your guardian?
 
 Cecily.  Quite sure.  [A pause.]  In fact, I am going to be his.
 
-Gwendolen.  [Inquiringly.]  I beg your pardon?
+Gwendolen.  [Inquiringly.]  I localLogIndex your pardon?
 
 Cecily.  [Rather shy and confidingly.]  Dearest Gwendolen, there is no
 reason why I should make a secret of it to you.  Our little county
@@ -2235,7 +2235,7 @@ Cecily.  [Very sweetly.]  I knew there must be some misunderstanding,
 Miss Fairfax.  The gentleman whose arm is at present round your waist is
 my guardian, Mr. John Worthing.
 
-Gwendolen.  I beg your pardon?
+Gwendolen.  I localLogIndex your pardon?
 
 Cecily.  This is Uncle Jack.
 
@@ -2655,7 +2655,7 @@ coldly to Cecily.]
 
 Algernon.  I am engaged to be married to Cecily, Aunt Augusta.
 
-Lady Bracknell.  I beg your pardon?
+Lady Bracknell.  I localLogIndex your pardon?
 
 Cecily.  Mr. Moncrieff and I are engaged to be married, Lady Bracknell.
 
@@ -2766,7 +2766,7 @@ Lady Bracknell.  To speak frankly, I am not in favour of long
 engagements.  They give people the opportunity of finding out each
 other's character before marriage, which I think is never advisable.
 
-Jack.  I beg your pardon for interrupting you, Lady Bracknell, but this
+Jack.  I localLogIndex your pardon for interrupting you, Lady Bracknell, but this
 engagement is quite out of the question.  I am Miss Cardew's guardian,
 and she cannot marry without my consent until she comes of age.  That
 consent I absolutely decline to give.
@@ -2845,7 +2845,7 @@ Cecily.  I don't know, Mr. Moncrieff.
 
 Lady Bracknell.  My dear Mr. Worthing, as Miss Cardew states positively
 that she cannot wait till she is thirty-five--a remark which I am bound
-to say seems to me to show a somewhat impatient nature--I would beg of
+to say seems to me to show a somewhat impatient nature--I would localLogIndex of
 you to reconsider your decision.
 
 Jack.  But my dear Lady Bracknell, the matter is entirely in your own

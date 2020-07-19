@@ -61,8 +61,6 @@ func (rf* Raft) UpdateCommitForLeader(tmpCurIndex int,tmpCurTerm int) bool {
 			}
 		}
 
-	//	DPrintf("test in UPCOMMIT: leader(%v)-tmpCurIndex(%v)-tmpCurTerm(%v)-tmpMatchNum(%v)",rf.me,tmpCurIndex,tmpCurTerm,tmpMatchNum)
-
 		//如果复制的数量大于一半并且其term正好是leader的当前的term
 		if tmpMatchNum > len(rf.peers)/2 && tmpCurTerm == rf.CurrentTerm {			//大于一半的人已经复制了log
 			//DPrintf("%v's commitIndex is %v, tmpCurIndex is %v\n",rf.me,rf.CommitIndex,tmpCurIndex)
@@ -81,32 +79,36 @@ func (rf* Raft) UpdateCommitForLeader(tmpCurIndex int,tmpCurTerm int) bool {
 //处理appendEntries的回复消息
 func (rf* Raft) HandleAppendEntriesResponse(args AppendEntriesArgs,reply AppendEntriesReply,server int) bool {
 
-	rf.UpdateTerm(reply.Term,server) //只要有response或者request都需要检测更新一下Term
-
+	rf.UpdateTerm(reply.Term) //只要有response或者request都需要检测更新一下Term
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	if args.Term != rf.CurrentTerm {	//发送rpc消息需要花费一定时间，可能会阻塞,所以此处需要比较是否已经不再是leader了
-		return false
-	}
-   //如果前后两个term没有发生变化，说明还在同一个周期中
+
 	isContinue := false
 	isUpdated := false
 
 	if reply.Success { //follower成功接受消息
-		//心跳消息和log消息可以统一处理
-		//rf.NextIndex[server] = rf.NextIndex[server] + len(args.Entries) //增加的log数目
-		//rf.MatchIndex[server] = rf.NextIndex[server] - 1
 
 		rf.MatchIndex[server] = len(args.Entries) + args.PrevLogIndex	//为了防止收到重复的success消息，增加的log数目应该使用这种方式
 		rf.NextIndex[server] = rf.MatchIndex[server] + 1
 
 		isUpdated = rf.UpdateCommitForLeader(rf.MatchIndex[server], args.Term)		//参数是当前server的matchIndex
 
-		//DPrintf("%v's MatchIndex is %v\n",server,rf.MatchIndex[server])
-
 	}else {				//如果发送日志失败，nextIndex需要减1，并重新尝试
-		rf.NextIndex[server] = rf.NextIndex[server] - 1
+
+		//rf.NextIndex[server] = rf.NextIndex[server] - 1
+		var i int
+		for i = len(rf.Logs)-1;i>=0;i--{				//从后往前搜索
+			if rf.Logs[i].Term == reply.ConfilctTerm {
+				rf.NextIndex[server] = i + 1 //下一个term不等于confilctTerm的index
+				break
+			}
+		}
+
+		if i == -1{					//如果在leader的term中没找到冲突的term
+			rf.NextIndex[server] = reply.ConflictIndex
+		}
+
 		isContinue = true
 	}
 	if isUpdated {
@@ -129,7 +131,6 @@ func (rf* Raft) RequestAppendNewEntries(peerIndex int,isHeartBeat bool) {
 			entries = append(entries,entry)
 		}
 
-		//DPrintf("")
 
 		//下面这条语句保证了，如果日志中还有未发送的log，则心跳消息也当做log消息发送
 		if len(entries) == 0 && isHeartBeat == false{			//如果不是心跳消息，或者需要发送的log为0，则直接退出

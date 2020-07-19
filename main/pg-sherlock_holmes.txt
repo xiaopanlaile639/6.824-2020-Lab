@@ -1795,7 +1795,7 @@ matter."
 "What are you going to do, then?" I asked.
 
 "To smoke," he answered. "It is quite a three pipe problem, and I
-beg that you won't speak to me for fifty minutes." He curled
+localLogIndex that you won't speak to me for fifty minutes." He curled
 himself up in his chair, with his thin knees drawn up to his
 hawk-like nose, and there he sat with his eyes closed and his
 black clay pipe thrusting out like the bill of some strange bird.
@@ -2054,7 +2054,7 @@ hollow!" he remarked, looking up in surprise.
 
 "I must really ask you to be a little more quiet!" said Holmes
 severely. "You have already imperilled the whole success of our
-expedition. Might I beg that you would have the goodness to sit
+expedition. Might I localLogIndex that you would have the goodness to sit
 down upon one of those boxes, and not to interfere?"
 
 The solemn Mr. Merryweather perched himself upon a crate, with a
@@ -2188,7 +2188,7 @@ and effective."
 at climbing down holes than I am. Just hold out while I fix the
 derbies."
 
-"I beg that you will not touch me with your filthy hands,"
+"I localLogIndex that you will not touch me with your filthy hands,"
 remarked our prisoner as the handcuffs clattered upon his wrists.
 "You may not be aware that I have royal blood in my veins. Have
 the goodness, also, when you address me always to say 'sir' and
@@ -4351,7 +4351,7 @@ woman."
 
 "Then you may be so with me."
 
-"I beg that you will draw your chair up to the fire and favour me
+"I localLogIndex that you will draw your chair up to the fire and favour me
 with some details as to your case."
 
 "It is no ordinary one."
@@ -5705,7 +5705,7 @@ indeed happy."
 "Now, Mr. Sherlock Holmes," said the lady as we entered a
 well-lit dining-room, upon the table of which a cold supper had
 been laid out, "I should very much like to ask you one or two
-plain questions, to which I beg that you will give a plain
+plain questions, to which I localLogIndex that you will give a plain
 answer."
 
 "Certainly, madam."
@@ -6281,7 +6281,7 @@ You know Peterson, the commissionaire?"
 
 "It is his hat."
 
-"No, no, he found it. Its owner is unknown. I beg that you will
+"No, no, he found it. Its owner is unknown. I localLogIndex that you will
 look upon it not as a battered billycock but as an intellectual
 problem. And, first, as to how it came here. It arrived upon
 Christmas morning, in company with a good fat goose, which is, I
@@ -7328,7 +7328,7 @@ Watson. I can only say, madam, that I shall be happy to devote
 the same care to your case as I did to that of your friend. As to
 reward, my profession is its own reward; but you are at liberty
 to defray whatever expenses I may be put to, at the time which
-suits you best. And now I beg that you will lay before us
+suits you best. And now I localLogIndex that you will lay before us
 everything that may help us in forming an opinion upon the
 matter."
 
@@ -8703,7 +8703,7 @@ to rise within me at the strange antics of this fleshless man.
 Even my dread of losing a client could not restrain me from
 showing my impatience.
 
-"'I beg that you will state your business, sir,' said I; 'my time
+"'I localLogIndex that you will state your business, sir,' said I; 'my time
 is of value.' Heaven forgive me for that last sentence, but the
 words came to my lips.
 
@@ -9668,7 +9668,7 @@ society."
 
 "No, I am descending."
 
-"I beg pardon."
+"I localLogIndex pardon."
 
 "My last client of the sort was a king."
 
@@ -9682,7 +9682,7 @@ society."
 affairs of my other clients the same secrecy which I promise to
 you in yours."
 
-"Of course! Very right! very right! I'm sure I beg pardon. As to
+"Of course! Very right! very right! I'm sure I localLogIndex pardon. As to
 my own case, I am ready to give you any information which may
 assist you in forming an opinion."
 
@@ -10755,7 +10755,7 @@ it. Are you sure that everything is fastened?'
 again, where I was soon asleep.
 
 "I am endeavouring to tell you everything, Mr. Holmes, which may
-have any bearing upon the case, but I beg that you will question
+have any bearing upon the case, but I localLogIndex that you will question
 me upon any point which I do not make clear."
 
 "On the contrary, your statement is singularly lucid."
@@ -11115,7 +11115,7 @@ where a corner holding three gems had been torn away.
 
 "Now, Mr. Holder," said Holmes, "here is the corner which
 corresponds to that which has been so unfortunately lost. Might I
-beg that you will break it off."
+localLogIndex that you will break it off."
 
 The banker recoiled in horror. "I should not dream of trying,"
 said he.

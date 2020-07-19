@@ -49,9 +49,10 @@ const (
 	LEADER     int = 1
 )
 
-const FOL_BASE_TIME = 300
-const CAN_BASE_TIME = 150
-const  RANDTIME = 300
+//const FOL_BASE_TIME = 300
+const FOL_BASE_TIME =300
+const CAN_BASE_TIME = 300
+const  RANDTIME = 150
 
 
 //
@@ -119,6 +120,9 @@ type AppendEntriesArgs struct {
 type AppendEntriesReply struct {
 	Term	int		//currentTerm, for leader to update itself
 	Success	bool	//true if follower contained entry matching preLogIndex and preLogTerm
+
+	ConflictIndex	int 		//用作quickly backup
+	ConfilctTerm	int 		//用作quickly backup
 }
 
 
@@ -238,7 +242,7 @@ func (rf *Raft) readPersist(data []byte) {
 
 func (rf *Raft) AppendEntries(args * AppendEntriesArgs, reply *AppendEntriesReply) {
 
-	isUpdated := rf.UpdateTerm(args.Term,args.LeaderId) //更新term
+	isUpdated := rf.UpdateTerm(args.Term) //更新term
 
 	isUpdateCommit := false
 	reply.Success = false
@@ -262,22 +266,32 @@ func (rf *Raft) AppendEntries(args * AppendEntriesArgs, reply *AppendEntriesRepl
 
 			//DPrintf("leader's(%v) last log match with %v's(%v)\n",args.LeaderId,rf.me,rf.Logs[tmpPrevLogIndex].Cmd)
 
-			//统一处理日志消息和心跳消息
 			reply.Success = true
-			//isConfilct:=false
-			//confilctIndex :=-1
+			isConfilct:=false
 
-			DPrintf("before:%v's log len is %v\n",rf.me,len(rf.Logs))
+			localLogIndex :=tmpPrevLogIndex+1
+			leaderLogIndex :=0
+			for ; leaderLogIndex <len(args.Entries); leaderLogIndex++{
 
-			//统一处理冲突和不冲突（这种方式可能不太好？？？）
-			rf.Logs = rf.Logs[:tmpPrevLogIndex+1]		//PreLogIndex以后的元素都删除
-			DPrintf("mid:%v's log len is %v\n",rf.me,len(rf.Logs))
-			//在这之后添加leader发来的的logs
-			for _,entry := range args.Entries{
-				rf.Logs = append(rf.Logs,entry)
+				if  localLogIndex < len(rf.Logs) { //在小于本地日志长度范围内比较
+					if rf.Logs[localLogIndex].Term != args.Entries[leaderLogIndex].Term{ //判断是否冲突
+						isConfilct = true
+						break				//发生冲突退出
+					}
+				}else {					//超过了范围
+					break
+				}
+				localLogIndex++ //本地日志向后推移
 			}
 
-			DPrintf("after:%v's log len is %v\n",rf.me,len(rf.Logs))
+			if isConfilct{				//如果有冲突
+				rf.Logs = rf.Logs[:localLogIndex] //删除所有冲突的元素
+			}
+
+			//复制剩下的元素
+			for ; leaderLogIndex <len(args.Entries); leaderLogIndex++{
+				rf.Logs = append(rf.Logs,args.Entries[leaderLogIndex])
+			}
 
 			//更新CommitIndex
 			if args.LeaderCommit > rf.CommitIndex {
@@ -290,20 +304,29 @@ func (rf *Raft) AppendEntries(args * AppendEntriesArgs, reply *AppendEntriesRepl
 				}else {
 					rf.CommitIndex = args.LeaderCommit
 				}
-
 				DPrintf("%v's commitIndex is %v\n",rf.me,rf.CommitIndex)
-
 			}
-
 			rf.persist()			//持久化存储
 
-		}else{
-			DPrintf("leader's(%v) last log not match with %v's\n",args.LeaderId,rf.me)
-			if tmpPrevLogIndex <len(rf.Logs ){
-				//rf.Logs[tmpPrevLogIndex].Term == tmpTerm
+		}else{			//log and term 不匹配
 
-				DPrintf("%v's last log is %v, leader's last log index is %v\n",rf.me,rf.Logs[tmpPrevLogIndex].Cmd,tmpPrevLogIndex)
+			if len(rf.Logs) <= tmpPrevLogIndex{				//node结点的日志小于preLogIndex
+				reply.ConfilctTerm = -1		//没有冲突的term
+				reply.ConflictIndex = len(rf.Logs)
+			}else{				//term不匹配
+				reply.ConfilctTerm = rf.Logs[tmpPrevLogIndex].Term		//返回冲突的term
+
+				//寻找第一个term的冲突index
+				for _,entry:= range rf.Logs{
+					if entry.Term == reply.ConfilctTerm{
+						reply.ConflictIndex = entry.Index
+						break
+					}
+				}
+
 			}
+
+			DPrintf("leader's(%v) last log not match with %v's\n",args.LeaderId,rf.me)
 
 		}
 	}
@@ -359,42 +382,32 @@ func (rf *Raft)UpToDate(args *RequestVoteArgs) bool{
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
+	rf.UpdateTerm(args.Term)			//不管三七二十一，只要是对方的term较高，就采用对方的
 
 	rf.mu.Lock()			//加锁
 	defer rf.mu.Unlock()
 
-	vote:= false
+	reply.VoteGranted = false
+	reply.Term = rf.CurrentTerm
 
 	if args.Term<rf.CurrentTerm {		//如果candidate的Term较小
-		vote = false
-		DPrintf("test4:%v refuse to vote to %v",rf.me,args.CandidateId)
+		reply.VoteGranted = false
+		DPrintf("test4:%v refuse to vote to %v",rf.me,args.CandidateId)		/////???
+	}else if rf.VoteFor == -1 || rf.VoteFor == args.CandidateId {
+		if rf.UpToDate(args){			//如果更新
+			reply.VoteGranted = true				//投票
 
-	}else if args.Term == rf.CurrentTerm {		//处在同一term中
-		if rf.VoteFor != -1 {			//已经投票了
-			vote = false
-			DPrintf("test3:%v refuse to vote to %v",rf.me,args.CandidateId)
-		}else {			///???
-			vote = true
+			rf.InitFollowerWithLock(args.CandidateId)     //转化为Followers,并投票给CandidateId
 			DPrintf("test2:%v vote to %v",rf.me,args.CandidateId)
+		}else{
+			reply.VoteGranted = false
+			DPrintf("test3:%v refuse to vote to %v",rf.me,args.CandidateId)		/////???
 		}
-	} else {
-		if rf.UpToDate(args) {			//candidate的日志是否更新
-			vote = true
-			DPrintf("test1:%v vote to %v",rf.me,args.CandidateId)
-		}else {
-			vote = false
-			DPrintf("test5:%v refuse to vote to %v",rf.me,args.CandidateId)
-		}
-	}
-	if vote {
-		reply.VoteGranted = true		//投票
-
-		rf.CurrentTerm = args.Term    //采取candidate的term
-		rf.InitFollowerWithLock(args.CandidateId)     //转化为Followers,并投票给CandidateId
 	}else{
-		reply.VoteGranted = false		//拒绝投票
-		reply.Term = rf.CurrentTerm		//返回当前周期
+		reply.VoteGranted = false
+		DPrintf("test1:%v refuse to vote to %v",rf.me,args.CandidateId)		/////???
 	}
+
 }
 
 //
@@ -648,13 +661,13 @@ func (rf* Raft) GetLastLogEntryWithLock() LogEntry {
 }
 
 //更新周期，用于request和response中
-func (rf* Raft) UpdateTerm(term int, server int) bool{
+func (rf* Raft) UpdateTerm(term int) bool{
 
 	isUpdated:= false
 	rf.mu.Lock()
 	if term > rf.CurrentTerm {
 		rf.CurrentTerm = term
-		rf.InitFollowerWithLock(server)				//投票给server
+		rf.InitFollowerWithLock(-1)				//不投票给任何server
 		isUpdated = true
 	}
 	rf.mu.Unlock()

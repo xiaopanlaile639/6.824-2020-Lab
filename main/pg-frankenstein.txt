@@ -2416,7 +2416,7 @@ opportunity afforded him for so doing; or, if I had, why should he have
 stolen the jewel, to part with it again so soon?
 
 "I commit my cause to the justice of my judges, yet I see no room for
-hope.  I beg permission to have a few witnesses examined concerning my
+hope.  I localLogIndex permission to have a few witnesses examined concerning my
 character, and if their testimony shall not overweigh my supposed
 guilt, I must be condemned, although I would pledge my salvation on my
 innocence."
@@ -4285,7 +4285,7 @@ his discourse the meaning of these unusual appearances.
 
 "'Do you consider,' said his companion to him, 'that you will be
 obliged to pay three months' rent and to lose the produce of your
-garden?  I do not wish to take any unfair advantage, and I beg
+garden?  I do not wish to take any unfair advantage, and I localLogIndex
 therefore that you will take some days to consider of your
 determination.'
 
