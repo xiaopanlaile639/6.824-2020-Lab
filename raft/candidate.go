@@ -18,7 +18,7 @@ func (rf* Raft) InitCandidate(){
 
 	rf.persist()				//持久化存储
 
-	DPrintf("%v become candidate(%v),it's waitTime is %v",rf.me,rf.CurrentTerm,rf.eleWaitTime)
+	DPrintf("%v become candidate(%v)",rf.me,rf.CurrentTerm)
 }
 
 

@@ -63,12 +63,11 @@ func (rf* Raft) UpdateCommitForLeader(tmpCurIndex int,tmpCurTerm int) bool {
 
 		//如果复制的数量大于一半并且其term正好是leader的当前的term
 		if tmpMatchNum > len(rf.peers)/2 && tmpCurTerm == rf.CurrentTerm {			//大于一半的人已经复制了log
-			//DPrintf("%v's commitIndex is %v, tmpCurIndex is %v\n",rf.me,rf.CommitIndex,tmpCurIndex)
 
 			rf.CommitIndex = tmpCurIndex
 			updated = true		//更新标志
 
-			DPrintf("leader's(%v) commitIndex is %v\n",rf.me,rf.CommitIndex)
+			//DPrintf("leader's(%v) commitIndex is %v\n",rf.me,rf.CommitIndex)
 			//???向follower发送commit通知???
 		}
 	}
@@ -137,9 +136,6 @@ func (rf* Raft) RequestAppendNewEntries(peerIndex int,isHeartBeat bool) {
 			rf.mu.Unlock()
 			return
 		}
-
-		//DPrintf("%v's nextIndex is %v,and leader's log len:%v(or %v)\n",peerIndex,rf.NextIndex[peerIndex],len(rf.Logs),rf.GetLastLogEntryWithLock().Index)
-
 
 		//初始化AppendEntries参数
 		args := AppendEntriesArgs{

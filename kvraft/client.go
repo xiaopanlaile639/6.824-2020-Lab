@@ -1,6 +1,10 @@
 package kvraft
 
-import "../labrpc"
+import (
+	"../labrpc"
+	"sync"
+	"time"
+)
 import "crypto/rand"
 import "math/big"
 
@@ -8,6 +12,12 @@ import "math/big"
 type Clerk struct {
 	servers []*labrpc.ClientEnd
 	// You will have to modify this struct.
+
+	mu      sync.Mutex
+	id	 int64
+	cmdIndex	int64
+	lastLeader	int
+
 }
 
 func nrand() int64 {
@@ -21,6 +31,12 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
 	ck.servers = servers
 	// You'll have to add code here.
+
+	ck.id = time.Now().UnixNano()			//构造id
+	ck.cmdIndex = 0			//从0条命令开始
+	ck.lastLeader = 0
+
+
 	return ck
 }
 
@@ -39,7 +55,35 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 func (ck *Clerk) Get(key string) string {
 
 	// You will have to modify this function.
-	return ""
+	retStr := ""
+
+	newCmdIndex:=ck.IncCmdIndex()		//增加命令编号
+
+	args:= GetArgs{
+		Key: key,
+		ClientId: ck.id,
+		CmdIndex: newCmdIndex,
+	}
+	reply:=GetReply{}
+
+	//循环发送请求，知道返回成功或失败
+	for {
+
+		DPrintf("client(%v） Get key(%v) from %v...\n",ck.id,key,ck.lastLeader)
+		ok := ck.servers[ck.lastLeader].Call("KVServer.Get", &args, &reply)
+
+		if ok && reply.Err == OK { //如果返回成功
+			retStr = reply.Value
+			DPrintf("client(%v） Get key(%v)->val（%v） from %v OK.\n",ck.id,key,reply.Value,ck.lastLeader)
+			break
+		}else{
+			DPrintf("%v Get to server %v failed(%v) change next...\n",ck.id,ck.lastLeader,reply.Err)
+			ck.NextLeader()
+		}
+
+	}
+
+	return retStr
 }
 
 //
@@ -54,6 +98,35 @@ func (ck *Clerk) Get(key string) string {
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	// You will have to modify this function.
+
+	newCmdIndex:=ck.IncCmdIndex()
+
+
+	args := PutAppendArgs{
+		Key:   key,
+		Value: value,
+		Op:    op,
+		ClientId: ck.id,
+		CmdIndex: newCmdIndex,
+	}
+
+	reply:=PutAppendReply{ }
+
+	//循环发送请求，知道返回成功或失败
+	for {
+
+		DPrintf("client(%v） %v {%v->%v} to %v...\n",ck.id,op,key,value,ck.lastLeader)
+		ok := ck.servers[ck.lastLeader].Call("KVServer.PutAppend", &args, &reply)
+
+		if ok && reply.Err == OK{			//如果成功提交，返回成功
+			DPrintf("client %v {%v->%v} OK",op,key,value)
+			break
+		}else{
+			DPrintf("%v PutAppend to server %v failed(%v) change next...\n",ck.id,ck.lastLeader,reply.Err)
+			ck.NextLeader()
+		}
+	}
+
 }
 
 func (ck *Clerk) Put(key string, value string) {
@@ -62,3 +135,24 @@ func (ck *Clerk) Put(key string, value string) {
 func (ck *Clerk) Append(key string, value string) {
 	ck.PutAppend(key, value, "Append")
 }
+
+//互斥增加命令编号
+func (ck*Clerk)IncCmdIndex()int64{
+
+	ck.mu.Lock()
+	ck.cmdIndex++
+	retCmdIndex:=ck.cmdIndex
+	ck.mu.Unlock()
+
+	return retCmdIndex
+}
+
+func (ck*Clerk)NextLeader(){
+	ck.mu.Lock()
+	ck.lastLeader = (ck.lastLeader+1) % len(ck.servers)
+	ck.mu.Unlock()
+}
+
+//func (ck*Clerk)NextLeader(){
+//
+//}

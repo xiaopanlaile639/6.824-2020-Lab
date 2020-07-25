@@ -18,8 +18,10 @@ package raft
 //
 
 import (
+
 	"bytes"
 
+	//"kvraft"
 	"math/rand"
 	"sync"
 	"time"
@@ -55,6 +57,7 @@ const CAN_BASE_TIME = 300
 const  RANDTIME = 150
 
 
+
 //
 // as each Raft peer becomes aware that successive Logs entries are
 // committed, the peer should send an ApplyMsg to the service (or
@@ -70,6 +73,10 @@ type ApplyMsg struct {
 	CommandValid bool
 	Command      interface{}
 	CommandIndex int
+
+
+//	CommandTerm	int 		//提交的周期
+
 }
 
 
@@ -102,6 +109,8 @@ type  LogEntry struct {
 	Index 	int			//当前的index
 	Cmd		interface{}		//命令
 
+	//CmdMethod		string
+	//CmdArgs			[]string
 	//VoteNum	int 			//记录目前接受的投票数量
 
 }
@@ -112,7 +121,7 @@ type AppendEntriesArgs struct {
 	PrevLogIndex int	//index of Logs entry immediately preceding new ones
 	PreLogTerm	int 	//term of PrevLogIndex entry
 	Entries[] 	LogEntry	//Logs entries to store (empty for heartbeat; may send more than one for efficiency)
-	//Entries 		LogEntry		//默认先处理一条log信息
+
 	LeaderCommit	int	// leader's commitIndex
 
 }
@@ -304,7 +313,7 @@ func (rf *Raft) AppendEntries(args * AppendEntriesArgs, reply *AppendEntriesRepl
 				}else {
 					rf.CommitIndex = args.LeaderCommit
 				}
-				DPrintf("%v's commitIndex is %v\n",rf.me,rf.CommitIndex)
+				//DPrintf("%v's commitIndex is %v\n",rf.me,rf.CommitIndex)
 			}
 			rf.persist()			//持久化存储
 
@@ -477,12 +486,15 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		index = len(rf.Logs)		//此log所在的位置
 		term = rf.CurrentTerm
 		isLeader = true
+
 		//构造日志
 		log := LogEntry{
 			Term:  rf.CurrentTerm,
 			Index: index,
 			Cmd:   command,
+
 		}
+
 		//加入自己的log日志中
 		rf.Logs = append(rf.Logs,log) //添加一条log信息
 
@@ -561,14 +573,14 @@ func (rf* Raft) doCommit() {
 			rf.Applycond.Wait()
 		}
 
-		DPrintf("in Commit: %v's log len:%v",rf.me,len(rf.Logs))
+		//DPrintf("in Commit: %v's log len:%v",rf.me,len(rf.Logs))
 
 		i:=rf.LastApplied+1
 		for ; i<=rf.CommitIndex;i++ {
 			DPrintf("%v apply Index %v(%v)  \n",rf.me,i,rf.Logs[i].Cmd)
 
-			//？？？这里是log[i].Cmd还是log[i-1].Cmd
-			msg:=ApplyMsg{true,rf.Logs[i].Cmd,i}
+			msg := ApplyMsg{true,rf.Logs[i].Cmd,i}
+
 			rf.mu.Unlock()
 			rf.applyCh<-msg
 			rf.mu.Lock()
@@ -620,12 +632,11 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		Cmd:   "initCmd",
 	})
 
-	DPrintf("%v init...\n",me)
+	DPrintf("raft %v init...\n",me)
 	rf.role = FOLLOWER
 	rf.elapsTime = 0
 	rf.waitTime = rand.Intn(RANDTIME)+FOL_BASE_TIME	//设置下次超时的时间
 
-	//rf.InitFollowerWithLock(-1) //初始化的时候，不能使用这个函数，因为这个函数中会有持久化操作
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())

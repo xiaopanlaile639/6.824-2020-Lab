@@ -206,7 +206,9 @@ func GenericTest(t *testing.T, part string, nclients int, unreliable bool, crash
 			for atomic.LoadInt32(&done_clients) == 0 {
 				if (rand.Int() % 1000) < 500 {
 					nv := "x " + strconv.Itoa(cli) + " " + strconv.Itoa(j) + " y"
+
 					// log.Printf("%d: client new append %v\n", cli, nv)
+
 					Append(cfg, myck, key, nv)
 					last = NextValue(last, nv)
 					j++
