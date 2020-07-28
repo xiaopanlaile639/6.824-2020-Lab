@@ -8,6 +8,9 @@ import (
 import "crypto/rand"
 import "math/big"
 
+const (
+	ChangeLeaderInterval = time.Millisecond * 20
+)
 
 type Clerk struct {
 	servers []*labrpc.ClientEnd
@@ -72,18 +75,43 @@ func (ck *Clerk) Get(key string) string {
 		DPrintf("client(%v） Get key(%v) from %v...\n",ck.id,key,ck.lastLeader)
 		ok := ck.servers[ck.lastLeader].Call("KVServer.Get", &args, &reply)
 
-		if ok && reply.Err == OK { //如果返回成功
-			retStr = reply.Value
-			DPrintf("client(%v） Get key(%v)->val（%v） from %v OK.\n",ck.id,key,reply.Value,ck.lastLeader)
-			break
+		if ok{
+			switch reply.Err {
+			case OK:
+				retStr = reply.Value
+				DPrintf("client(%v） Get key(%v)->val（%v） from %v OK.\n",ck.id,key,reply.Value,ck.lastLeader)
+				return retStr
+			case ErrNoKey:
+				retStr = ""
+				DPrintf("%v Get to server %v failed(%v) change next...\n",ck.id,ck.lastLeader,reply.Err)
+				return retStr
+			case ErrWrongLeader:
+				DPrintf("%v Get to server %v failed(%v) change next...\n",ck.id,ck.lastLeader,reply.Err)
+				time.Sleep(ChangeLeaderInterval)
+				ck.NextLeader()
+				continue
+			case TimeOut:
+				DPrintf("%v Get to server %v failed(%v)  retry...\n",ck.id,ck.lastLeader,reply.Err)
+				//ck.NextLeader()
+				continue
+			}
 		}else{
-			DPrintf("%v Get to server %v failed(%v) change next...\n",ck.id,ck.lastLeader,reply.Err)
-			ck.NextLeader()
+			DPrintf("%v Call KVServer.Get error",ck.lastLeader)
 		}
+
+
+		//if o	k && reply.Err == OK { //如果返回成功
+		//
+		//	DPrintf("client(%v） Get key(%v)->val（%v） from %v OK.\n",ck.id,key,reply.Value,ck.lastLeader)
+		//	break
+		//}else{
+		//	DPrintf("%v Get to server %v failed(%v) change next...\n",ck.id,ck.lastLeader,reply.Err)
+		//	ck.NextLeader()
+		//}
 
 	}
 
-	return retStr
+	//return retStr
 }
 
 //
@@ -115,7 +143,7 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 	//循环发送请求，知道返回成功或失败
 	for {
 
-		DPrintf("client(%v） %v {%v->%v} to %v...\n",ck.id,op,key,value,ck.lastLeader)
+		DPrintf("(%v）Client %v {%v->%v} to %v...\n",ck.id,op,key,value,ck.lastLeader)
 		ok := ck.servers[ck.lastLeader].Call("KVServer.PutAppend", &args, &reply)
 
 		if ok && reply.Err == OK{			//如果成功提交，返回成功
@@ -123,7 +151,7 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 			break
 		}else{
 			DPrintf("%v PutAppend to server %v failed(%v) change next...\n",ck.id,ck.lastLeader,reply.Err)
-			ck.NextLeader()
+			ck.NextLeader()				//更换下一个kv server，重新发送请求
 		}
 	}
 
@@ -153,6 +181,3 @@ func (ck*Clerk)NextLeader(){
 	ck.mu.Unlock()
 }
 
-//func (ck*Clerk)NextLeader(){
-//
-//}
