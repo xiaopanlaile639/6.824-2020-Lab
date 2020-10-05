@@ -283,17 +283,6 @@ func (rf *Raft) SendLogOrSnapshot(server int,isHeartBeat bool){
 		nextIndex:=rf.NextIndex[server]
 		lastIncIndex:=rf.LastIncIndex
 
-		//if rf.isInstallingSnapshot[server] == 1 {
-		//	//rf.mu.Unlock()
-		//	//rf.unlock("SendLogOrSnapshot lock")
-		//	return
-		//}
-
-		//rf.mu.Unlock()
-	//	rf.unlock("SendLogOrSnapshot lock")
-
-		//DPrintf("leader(%v)'s lastIncIndex(%v) vs %v 's nexIndex(%v)\n",rf.me,lastIncIndex,server,nextIndex)
-
 		if nextIndex <= lastIncIndex {		//小于快照位置
 			rf.RequestInstallSnapshot(server)
 		}else{

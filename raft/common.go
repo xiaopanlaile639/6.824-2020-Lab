@@ -136,14 +136,14 @@ type InstallSnapReplys struct {
 //Snapshot 结构体
 type SnapShot struct {
 	DB map[string]string		//保存的数据库
-	LastCmdIndexMap	map[int64]int64		//
+	LastCmdIndexMap	map[int64]int		//
 
 	LastAppliedIndex		int
 	LastAppliedTerm			int
 	//SnapshotIndex	int		//保存log的编号
 	//SnapshotTerm	int //最后一个log的term
 
-
+	//CurConfig	shardmaster.Config			//需要保存的config信息
 }
 
 

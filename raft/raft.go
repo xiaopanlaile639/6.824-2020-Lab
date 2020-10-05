@@ -42,7 +42,6 @@ func (rf *Raft) persist() {
 	}
 
 	statsByte,isOk:= rf.Serialize(stats,StatsType)
-
 	if isOk{
 		rf.persister.SaveRaftState(statsByte)
 	}else{
@@ -286,8 +285,6 @@ func  (rf *Raft) RequestSnapshot(args *InstallSnapArgs, reply *InstallSnapReplys
 
 		rf.SaveStateAndSnapshotWithLock(args.Snapshot)			//保存leader发来的快照
 
-
-
 		rf.Applycond.Signal()			//释放信号
 
 		reply.Ok = true
@@ -328,8 +325,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	defer rf.unlock("Start lock")
 
 	if rf.role == LEADER {			//只有Leader才接受请求
-
-
 
 		//返回的信息
 		index = rf.GetLastLogEntryWithLock().Index+1 		//此log的index
@@ -456,7 +451,6 @@ func (rf* Raft) doCommit() {
 			rf.applyCh<-msg
 
 			rf.lock("applyLog lock in doCommit")
-	//		DPrintf("%v apply Index %v(%v) ---CommitIndex(%v) \n",rf.me,msg.CommandIndex,msg.CommandTerm,rf.CommitIndex)
 			DPrintf("%v apply cmd:index:term(%v:%v:%v) ---CommitIndex(%v) \n",rf.me,msg.Command,msg.CommandIndex,msg.CommandTerm,rf.CommitIndex)
 			rf.LastApplied = msg.CommandIndex
 			rf.unlock("applyLog lock in doCommit")
@@ -558,8 +552,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.LastIncIndex = 0
 	rf.LastIncTerm = 0
 
-	//rf.LastIncIndex = -1	//初始化为-1
-	//rf.LastIncTerm = -1		//初始化为-1
 
 	rand.Seed(time.Now().UnixNano())		//设置随机数种子
 
@@ -568,19 +560,13 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.elapsTime = 0
 	rf.waitTime = rand.Intn(RANDTIME)+FOL_BASE_TIME	//设置下次超时的时间
 
-
-
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
-	//for i := 0; i < len(peers); i++ {
-	//	rf.isInstallingSnapshot = append(rf.isInstallingSnapshot, 0)
-	//}
 
 	go rf.RaftRunning()			//实例运行
 	go rf.doCommit()			//新开一个提交的单独例程
 
-	//go rf.LockDebug()
 
 	return rf
 }

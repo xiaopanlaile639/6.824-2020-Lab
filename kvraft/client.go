@@ -99,16 +99,6 @@ func (ck *Clerk) Get(key string) string {
 			DPrintf("%v Call KVServer.Get error",ck.lastLeader)
 		}
 
-
-		//if o	k && reply.Err == OK { //如果返回成功
-		//
-		//	DPrintf("client(%v） Get key(%v)->val（%v） from %v OK.\n",ck.id,key,reply.Value,ck.lastLeader)
-		//	break
-		//}else{
-		//	DPrintf("%v Get to server %v failed(%v) change next...\n",ck.id,ck.lastLeader,reply.Err)
-		//	ck.NextLeader()
-		//}
-
 	}
 
 	//return retStr

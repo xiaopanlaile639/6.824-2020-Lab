@@ -108,7 +108,6 @@ func (rf*Raft) VoteForMe(){
 		}
 	}
 
-
 }
 
 //开始一轮新的选举

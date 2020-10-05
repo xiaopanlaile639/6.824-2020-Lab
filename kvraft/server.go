@@ -67,11 +67,10 @@ type KVServer struct {
 
 	// Your definitions here.
 	DataBase	map[string]string			//kv键值数据库
-	lastCmdIndexMap	map[int64]int64		//跟踪每个client最后执行的一个编号
+	lastCmdIndexMap	map[int64]int		//跟踪每个client最后执行的一个编号
 
 	clientChannels map[RequestId]chan Result //判断cmdIndex的命令是否完成
 
-	//snapshots raft.SnapShot			//快照结构体
 	LastAppliedIndex int
 	LastAppliedTerm int
 
@@ -183,7 +182,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
 	kv.DataBase = make(map[string]string)      //初始化kv数据库
-	kv.lastCmdIndexMap = make(map[int64]int64) //初始化lastCmdIndex
+	kv.lastCmdIndexMap = make(map[int64]int) //初始化lastCmdIndex
 	kv.clientChannels = make(map[RequestId]chan Result)  //初始化
 
 	kv.LastAppliedIndex = -1
@@ -191,10 +190,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	kv.ReadSnapshot()			//首先从快照中恢复
 
-
 	go kv.RecApplyChan()				//单独开一个线程用于 读取从raft系统通道里返回的数据
-
-	//go kv.SleepTest()
 
 	return kv
 }
@@ -265,7 +261,6 @@ func (kv *KVServer) ApplyCmdToDB(request Op, commitIndex int,commitTerm int)Resu
 			res.Err = ErrNoKey
 		}
 
-
 		break
 	case "Put":
 		lastCmdIndex,ok:=kv.lastCmdIndexMap[request.ClientId]
@@ -298,8 +293,6 @@ func (kv *KVServer) ApplyCmdToDB(request Op, commitIndex int,commitTerm int)Resu
 
 		}
 
-
-
 		break
 	}
 
@@ -313,7 +306,6 @@ func (kv *KVServer) ApplyCmdToDB(request Op, commitIndex int,commitTerm int)Resu
 func (kv *KVServer) RecApplyChan(){
 
 	for{
-
 		 AppMsg,_:= <- kv.applyCh    //接受:
 
 		DPrintf("%v rev AppMsg:%v \n",kv.me,AppMsg)
@@ -337,7 +329,6 @@ func (kv *KVServer) RecApplyChan(){
 					DPrintf("error : could not find notify channel\n")
 				}
 			}
-
 			go kv.SaveSnapshot()			//保存快照
 
 		}else{				//snapshot 消息
@@ -346,8 +337,6 @@ func (kv *KVServer) RecApplyChan(){
 		}
 	}
 }
-
-
 
 
 //处理snapshot,若snapshot达到限额
@@ -367,11 +356,8 @@ func (kv *KVServer) SaveSnapshot(){
 			LastAppliedIndex: kv.LastAppliedIndex,
 			LastAppliedTerm: kv.LastAppliedTerm,
 		}
-
 		kv.rf.SaveStateAndSnapshot(snapShot)
-
 	}
-
 	kv.mu.Unlock()
 
 }
@@ -397,15 +383,8 @@ func (kv* KVServer) ReadSnapshot()bool{
 	kv.LastAppliedTerm = snapshot.LastAppliedTerm
 
 	DPrintf("%v read snapshot,it 's lastIncIndex:%v",kv.me,kv.LastAppliedIndex)
-	//kv.mu.Unlock()
 	return true
-
-
 }
-
-
-
-
 
 
 //更新上一条命令
