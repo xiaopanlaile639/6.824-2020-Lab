@@ -45,17 +45,6 @@ func (rf*Raft) SaveStateAndSnapshot(snapshot SnapShot){
 		return
 	}
 
-	//if snapshot.LastAppliedIndex > rf.CommitIndex{
-	//	//DPrintf("")
-	//	fmt.Printf("%v snapshot.LastAppliedIndex(%v) > rf.CommitIndex(%v)\n",rf.me,snapshot.LastAppliedIndex,rf.CommitIndex)
-	//	os.Exit(-1)
-	//	//panic("")
-	//}
-
-	//begIndex:=rf.Logs[0].Index
-	//endIndex:=rf.Logs[len(rf.Logs)-1].Index
-	//DPrintf("before save and trim,%v 's Index range:%v--%v",rf.me,begIndex,endIndex)
-
 	rf.TrimLogsWithLock(snapshot.LastAppliedIndex)		//裁剪log
 	rf.LastIncIndex = snapshot.LastAppliedIndex
 	rf.LastIncTerm = snapshot.LastAppliedTerm
@@ -76,10 +65,45 @@ func (rf*Raft) SaveStateAndSnapshot(snapshot SnapShot){
 	DPrintf("%v save and trim index:term(%v:%v), it's size is %v \n",
 		rf.me,snapshot.LastAppliedIndex,rf.LastIncTerm,rf.GetRaftStateSize())
 
-	//rf.mu.Unlock()
+}
 
+//保存快照和状态,for kvserver
+//snapshot 为二进制byte版本
+func (rf*Raft) SaveStateAndSnapshotByte(lastAppliedIndex int,lastAppliedTerm int, snapshotByte []byte){
+
+	//rf.mu.Lock()
+
+	rf.lock("SaveStateAndSnapshot lock")
+	defer rf.unlock("SaveStateAndSnapshot lock")
+
+	//正常情况下，SnapShot的LastAppliedIndex都是大于等于rf.LastIncIndex
+	//但是有些情况从leader那接收到新的snapshot会使得rf.LastIncIndex >= LastAppliedInde
+	if lastAppliedIndex <= rf.LastIncIndex{
+		return
+	}
+
+	rf.TrimLogsWithLock(lastAppliedIndex)		//裁剪log
+	rf.LastIncIndex = lastAppliedIndex
+	rf.LastIncTerm = lastAppliedTerm
+
+
+	stats:=Stats{
+		CurrentTerm: rf.CurrentTerm,
+		VoteFor:     rf.VoteFor,
+		Logs:        rf.Logs,
+		LastIncIndex: rf.LastIncIndex,
+		LastIncTerm: rf.LastIncTerm,
+	}
+	//snapshotByte,_ := rf.Serialize(snapshot,SnapshotType)		//序列化
+	stateByte,_ := rf.Serialize(stats,StatsType)
+
+	rf.persister.SaveStateAndSnapshot(stateByte,snapshotByte)
+
+	DPrintf("%v save and trim index:term(%v:%v), it's size is %v \n",
+		rf.me,lastAppliedIndex,rf.LastIncTerm,rf.GetRaftStateSize())
 
 }
+
 
 //for requestSnapshot
 func (rf*Raft) SaveStateAndSnapshotWithLock(snapshot SnapShot){

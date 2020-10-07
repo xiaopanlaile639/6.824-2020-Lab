@@ -1,8 +1,9 @@
 package shardkv
 
 import (
-	"../raft"
+	"../labgob"
 	"../shardmaster"
+	"bytes"
 	"log"
 	"os"
 	"time"
@@ -61,10 +62,9 @@ type Op struct {
 	ClientId	int64		//请求的客户端id
 	CmdIndex	int			//指令的编号
 
-
-	NewConfig shardmaster.Config
-
-	ChaDB	map[string]string	//交换的DB
+	//NewConfig shardmaster.Config
+	//
+	//ChaDB	map[string]string	//交换的DB
 
 }
 
@@ -178,22 +178,6 @@ func (kv *ShardKV) ApplyCmdToDB(request Op, commitIndex int,commitTerm int)Resul
 		}
 
 		break
-
-	case SendShard:			//收到config
-
-		//接受到chaDB
-		chaDB:=request.ChaDB
-		for key,val:=range chaDB{
-			kv.DataBase[key] = val
-		}
-
-		kv.curConfig = request.NewConfig		//复制为新的config
-		break
-
-	case SendConfig:
-
-		kv.curConfig = request.NewConfig		//只更换新的config
-		break
 	}
 
 	kv.ShowDB()
@@ -206,35 +190,41 @@ func (kv *ShardKV) ApplyCmdToDB(request Op, commitIndex int,commitTerm int)Resul
 //专门接受raft系统的返回信息，通过通道
 func (kv *ShardKV) RecApplyMsg(){
 
-	for{
-		AppMsg,_:= <- kv.applyCh    //接受:
+	for {
+		AppMsg, _ := <-kv.applyCh //接受:
 
-		DPrintf("%v(%v) rev AppMsg:%v \n",kv.me,kv.gid,AppMsg)
+		DPrintf("%v(%v) rev AppMsg:%v \n", kv.me, kv.gid, AppMsg)
 
 		if AppMsg.CommandValid { //如果是普通apply 消息
 
-			op:=AppMsg.Command.(Op)			//接口类型强制转化为Op类型
-			res := kv.ApplyCmdToDB(op,AppMsg.CommandIndex,AppMsg.CommandTerm) //将操作具体应用到DB中
+			if cfg, ok := AppMsg.Command.(shardmaster.Config); ok { //如果是config消息
+				kv.UpdateInAndOutDataShard(cfg) //更新shard相关信息
+			} else if migrationData, ok := AppMsg.Command.(MigrateReply); ok { //如果是数据消息
+				kv.UpdateDBWithMigrateData(migrationData)
+			} else if op := AppMsg.Command.(Op); ok { //如果接口类型强制转化为Op类型
 
-			if _, isLeader := kv.rf.GetState(); isLeader {
-				reqId:=RequestId{
-					ClientId: op.ClientId,
-					CmdIndex: op.CmdIndex,
-				}
-				ok,ch:=kv.GetClientChannel(reqId)
-				if ok{
-					ch<-res
-					kv.RemoveClientChannel(reqId)			//删除通道，说明此任务已完成
+				res := kv.ApplyCmdToDB(op, AppMsg.CommandIndex, AppMsg.CommandTerm) //将操作具体应用到DB中
 
-				}else {
-					DPrintf("error : could not find notify channel\n")
+				if _, isLeader := kv.rf.GetState(); isLeader {
+					reqId := RequestId{
+						ClientId: op.ClientId,
+						CmdIndex: op.CmdIndex,
+					}
+					ok, ch := kv.GetClientChannel(reqId)
+					if ok {
+						ch <- res
+						kv.RemoveClientChannel(reqId) //删除通道，说明此任务已完成
+
+					} else {
+						DPrintf("error : could not find notify channel\n")
+					}
 				}
+
+				go kv.SaveSnapshot() //保存快照
+
+			} else { //snapshot 消息
+				kv.ReadSnapshot() //恢复快照
 			}
-
-			go kv.SaveSnapshot()			//保存快照
-
-		}else{				//snapshot 消息
-			kv.ReadSnapshot()		//恢复快照
 		}
 	}
 }
@@ -247,44 +237,54 @@ func (kv *ShardKV) SaveSnapshot(){
 	raftLogSize:=kv.rf.GetRaftStateSize()
 	if kv.maxraftstate != -1 && raftLogSize >= kv.maxraftstate{
 
-
 		DPrintf("%v's log size(%v) reach to maxsize(%v)\n",kv.me,raftLogSize,kv.maxraftstate)
 
-		snapShot:=raft.SnapShot{
-			DB:              kv.DataBase,
-			LastCmdIndexMap: kv.lastCmdIndexMap,
-			LastAppliedIndex: kv.LastAppliedIndex,
-			LastAppliedTerm: kv.LastAppliedTerm,
+		w := new(bytes.Buffer)
+		e := labgob.NewEncoder(w)
+		e.Encode(kv.DataBase)
+		e.Encode(kv.lastCmdIndexMap)
+		e.Encode(kv.comeInShards)
+		e.Encode(kv.toOutShards)
+		e.Encode(kv.myShards)
+		e.Encode(kv.curConfig)
+		//e.Encode(kv.garbages)
 
-			//CurConfig: kv.curConfig,
-		}
-		kv.rf.SaveStateAndSnapshot(snapShot)
+		kv.rf.SaveStateAndSnapshotByte(kv.LastAppliedIndex,kv.LastAppliedTerm,w.Bytes())
 	}
+
 	kv.mu.Unlock()
 
 }
 
 func (kv* ShardKV) ReadSnapshot()bool{
 
+
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
 	snapshotByte:=kv.rf.ReadSnapshot()
-
 	if snapshotByte == nil || len(snapshotByte) < 1{
 		return false
 	}
 
-	snapshotInt,_:=kv.rf.Deserialize(snapshotByte,raft.SnapshotType)
-	snapshot := snapshotInt.(raft.SnapShot)
+	r := bytes.NewBuffer(snapshotByte)
+	d := labgob.NewDecoder(r)
 
+	var db map[string]string
+	var cid2Seq map[int64]int
+	var toOutShards map[int]map[int]map[string]string
+	var comeInShards map[int]int
+	var myShards	map[int]bool
+	var cfg shardmaster.Config
 
-	kv.DataBase = snapshot.DB
-	kv.lastCmdIndexMap = snapshot.LastCmdIndexMap
-	kv.LastAppliedIndex = snapshot.LastAppliedIndex
-	kv.LastAppliedTerm = snapshot.LastAppliedTerm
-
-	//kv.curConfig = snapshot.CurConfig
+	if d.Decode(&db) != nil || d.Decode(&cid2Seq) != nil || d.Decode(&comeInShards) != nil ||
+		d.Decode(&toOutShards) != nil || d.Decode(&myShards) != nil || d.Decode(&cfg) != nil {
+		log.Fatalf("readSnapShot ERROR for server %v", kv.me)
+		return false
+	} else {
+		kv.DataBase, kv.lastCmdIndexMap, kv.curConfig = db, cid2Seq, cfg
+		kv.toOutShards, kv.comeInShards, kv.myShards = toOutShards,comeInShards,myShards
+	}
 
 	DPrintf("%v read snapshot,it 's lastIncIndex:%v",kv.me,kv.LastAppliedIndex)
 	return true

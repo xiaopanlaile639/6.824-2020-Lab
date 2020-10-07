@@ -22,6 +22,7 @@ type ShardKV struct {
 	masters      []*labrpc.ClientEnd
 	maxraftstate int // snapshot if log grows this big
 
+	//persist 		*raft.Persister
 	// Your definitions here.
 
 	mck       *shardmaster.Clerk			//构造一个shardmaster，为了和其通信
@@ -32,9 +33,14 @@ type ShardKV struct {
 
 	LastAppliedIndex int
 	LastAppliedTerm int
+
 	DataBase	map[string]string			//kv键值数据库
 
-	isChanging	bool
+	//isChanging	bool
+
+	toOutShards 	map[int]map[int]map[string]string	// "cfg num -> (shard -> db)"
+	comeInShards	map[int]int     //"shard->config number"
+	myShards		map[int]bool	//"to record which shard i can offer service"
 
 
 }
@@ -47,11 +53,12 @@ func (kv *ShardKV)IsResForTheKey(key string)bool{
 	defer kv.mu.Unlock()
 
 	keyShardId:= key2shard(key)
-	if kv.curConfig.Shards[keyShardId] == kv.gid{
+	if kv.myShards[keyShardId] == true{
 		return true
 	}else{
 		return false
 	}
+
 }
 
 func (kv *ShardKV) ShowDB(){
@@ -66,11 +73,11 @@ func (kv *ShardKV) ShowDB(){
 func (kv *ShardKV) Get(args *GetArgs, reply *GetReply) {
 	// Your code here.
 
-	if kv.GetChaFlag() {
-		reply.Err = NotOK
-		DPrintf("%v(%v) is changing data,so Get not ok\n",kv.me,kv.gid)
-		return
-	}
+	//if kv.GetChaFlag() {
+	//	reply.Err = NotOK
+	//	DPrintf("%v(%v) is changing data,so Get not ok\n",kv.me,kv.gid)
+	//	return
+	//}
 
 	kv.mu.Lock()
 	DPrintf("%v(%v)'s curConfig's Num is %v\n",kv.me,kv.gid,kv.curConfig.Num)
@@ -113,12 +120,12 @@ func (kv *ShardKV) Get(args *GetArgs, reply *GetReply) {
 func (kv *ShardKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
 
-	//如果正在交换数据，则停止服务
-	if kv.GetChaFlag() {
-		reply.Err = NotOK
-		DPrintf("%v(%v) is changing data,so PutAppend not ok\n",kv.me,kv.gid)
-		return
-	}
+	////如果正在交换数据，则停止服务
+	//if kv.GetChaFlag() {
+	//	reply.Err = NotOK
+	//	DPrintf("%v(%v) is changing data,so PutAppend not ok\n",kv.me,kv.gid)
+	//	return
+	//}
 
 	kv.mu.Lock()
 	DPrintf("%v(%v)'s curConfig's Num is %v\n",kv.me,kv.gid,kv.curConfig.Num)
@@ -203,13 +210,19 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister,
 	kv.gid = gid
 	kv.masters = masters
 
+
 	// Your initialization code here.
 
 	DPrintf("%v(%v) start kv server\n",kv.me,kv.gid)
 
+	//kv.persist = persister
+
+	kv.toOutShards = make(map[int]map[int]map[string]string)
+	kv.comeInShards = make(map[int]int)
+	kv.myShards = make(map[int]bool)
+
 	// Use something like this to talk to the shardmaster:
 	// kv.mck = shardmaster.MakeClerk(kv.masters)
-
 	kv.mck = shardmaster.MakeClerk(kv.masters)		//构造一个shardmaster集群，为了和其通讯
 
 	kv.applyCh = make(chan raft.ApplyMsg)
@@ -221,16 +234,19 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister,
 
 	kv.LastAppliedIndex = -1
 	kv.LastAppliedTerm = -1
-	kv.curConfig.Num = 0		//第一个config初始为0
+
+	kv.curConfig = shardmaster.Config{}
+	//kv.curConfig.Num = 0		//第一个config初始为0
 
 	kv.ReadSnapshot()			//首先从快照中恢复
 
 	go kv.RecApplyMsg() //单独开一个线程用于 读取从raft系统通道里返回的数据
+	go kv.TryPollNewCfg()		//用于pull new config
+	go kv.TryPullShard()			//用于pull Shard
+	//go kv.FetLasCon()			//fetch 最后的配置
 
-	go kv.FetLasCon()			//fetch 最后的配置
 
-
-	kv.SetChaFlag(false)
+	//kv.SetChaFlag(false)
 	//kv.isChanging = false
 
 	return kv

@@ -45,7 +45,7 @@ func (sm *ShardMaster) ApplyConfigToSM(request Op)Result{
 	//填充num编号信息
 	sm.InitNewConfig(&curConfig)
 
-	DPrintf("in Apply Config: %v's curConfig Num is %v\n",sm.me,curConfig.Num)
+	//DPrintf("in Apply Config: %v's curConfig Num is %v\n",sm.me,curConfig.Num)
 
 	//获得new group 信息,
 	lastServers:=sm.GetLastServers()
@@ -123,7 +123,7 @@ func (sm *ShardMaster) ApplyConfigToSM(request Op)Result{
 			res.Err = OK
 			res.WrongLeader = false
 
-			DPrintf("%v is in applyConfig function, curConfigNum is %v",sm.me,curConfig.Num)
+			//DPrintf("%v is in applyConfig function, curConfigNum is %v",sm.me,curConfig.Num)
 
 		}
 	}else{				//已经失效的请求
@@ -174,8 +174,6 @@ func (sm *ShardMaster) SendConfigToRaft( op Op)Result{
 	}
 
 	if _, isLeader:=sm.rf.GetState(); isLeader{
-
-		//DPrintf("%v send config(%v) to raft, configIndex is %v\n",sm.me,op,op.ConfigIndex)
 
 		sm.rf.Start(op)
 

@@ -73,8 +73,6 @@ func (ck *Clerk) Join(servers map[int][]string) {
 				return
 			}
 
-			//DPrintf("%v + wrongLeader:%v in Join ",srv,reply.WrongLeader)
-
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

@@ -2,236 +2,202 @@ package shardkv
 
 import (
 	"../shardmaster"
+	"sync"
 	"time"
 )
 
-//把config发送给一个group的其他成员
-func (kv*ShardKV) SendConToFol(curConfig *shardmaster.Config)Result{
+type MigrateArgs struct {
+	Shard     int
+	ConfigNum int
+}
 
-	op:=Op{
-		Method:     SendConfig,
-		MethodArgs: nil,
-		ClientId:   -1,
-		CmdIndex:   -1,
-		NewConfig: kv.GetCurConfig(),
-		//NewConfig: *curConfig,
-	}
-
-	retRes:=Result{
-		Err:    ErrWrongLeader,
-		RetVal: "",
-	}
-
-	if _,isLeader:=kv.rf.GetState(); isLeader{		//只有是leader才能发送命令
-		retRes=kv.SendCmdToRaft(-1,-1,op)		//发送执行命令
-	}
-
-	return retRes
-
+type MigrateReply struct {
+	Err         Err
+	ConfigNum   int
+	Shard       int
+	DB          map[string]string
+	Cid2Seq     map[int64]int
 }
 
 
-////获取并删除当前DB中的shardId的K-V数据对
-//func (kv*ShardKV) GetChaDB(shardId int)map[string]string{
-//
-//	kv.mu.Lock()
-//	defer kv.mu.Unlock()
-//
-//	chaDB:=make(map[string]string)
-//
-//	for key,val:=range kv.DataBase{
-//		if key2shard(key) == shardId{
-//
-//			chaDB[key] = val		//获取要传输的key-val键值对
-//			delete(kv.DataBase,key)			//删除
-//
-//		}
-//	}
-//	return chaDB
-//}
-//
-////接收到副本组中（leader）发过来的数据
-////用于rpc通信
-//func (kv*ShardKV)RecChaData(chaArgs *ChaArgs,chaReply *ChaReply){
-//
-//	////......
-//	kv.mu.Lock()
-//	defer kv.mu.Unlock()
-//	kv.isChanging = true
-//
-//	DPrintf("%v in func RecChaData\n",kv.me)
-//
-//	for key,val:=range chaArgs.ChaDB{
-//
-//		if _,ok:=kv.DataBase[key];ok{
-//			DPrintf("error:%v has %v-%v already\n",kv.me,key,val)
-//		}else{
-//			kv.DataBase[key] = val				//添加进当前的DB中
-//		}
-//	}
-//
-//	chaReply.Err = OK
-//
-//	//....
-//}
-//
-////实际的数据交换
-//func (kv*ShardKV) RealChaData (chaPair [] ChaShardPair,lastConfig *shardmaster.Config){
-//
-//
-//	for _,sinChaPair := range chaPair{			//每一对数据都需要交换
-//
-//		if servers, ok := lastConfig.Groups[sinChaPair.toGid]; ok {
-//
-//			chaArgs:=ChaArgs{ChaDB: kv.GetChaDB(sinChaPair.shard)}
-//			chaReply:=ChaReply{Err: OK}
-//
-//			//遍历toGid组的所有成员,把数据发送给他们
-//			for _,srv:=range servers{
-//				srvPort := kv.make_end(srv)
-//
-//				ok:=srvPort.Call("ShardKV.RecChaData", &chaArgs,&chaReply)
-//
-//				//....
-//				if ok && chaReply.Err == OK{
-//					//....
-//				}else{
-//					//....
-//				}
-//			}
-//		}else{
-//			DPrintf("something wrong with lastConfig's group\n")
-//		}
-//	}
-//
-//}
-//
-////删除DB中的数据
-////适用于group中的非leader结点
-//func (kv *ShardKV)DelDBData(chaPair [] ChaShardPair){
-//
-//	for _,sinChaPair := range chaPair { //每一对数据都需要交换
-//
-//		kv.GetChaDB(sinChaPair.shard)		//返回值不需要使用
-//	}
-//}
-
-
-////获取需要交换的Pair
-//func (kv*ShardKV) GetChaPair(lastConfig* shardmaster.Config)[]ChaShardPair{
-//	var oldResShard []int
-//	var chaPair []ChaShardPair
-//
-//	kv.mu.Lock()
-//	//收集在新的config中，当前grooup 负责的shard
-//	for shardId,resGid := range kv.curConfig.Shards{
-//		if resGid == kv.gid{
-//			oldResShard = append(oldResShard,shardId)
-//		}
-//	}
-//	kv.mu.Unlock()
-//
-//	//构造传输对(以push的方式传输)
-//	for _,shardId := range oldResShard {
-//
-//		tmpFromGid:=kv.gid
-//		tmpToGid:= lastConfig.Shards[shardId]
-//
-//		if tmpFromGid != tmpToGid {
-//
-//			tmpChaPair:=ChaShardPair{
-//				fromGid: kv.gid,			//采用的push的方式，所以from的gid就是kv的
-//				toGid:   tmpToGid,
-//				shard:   shardId,
-//			}
-//			chaPair = append(chaPair,tmpChaPair)
-//			//chaShard = append(chaShard,shardId)
-//		}
-//	}
-//	return chaPair
-//}
-
-////修改shards
-//func (kv*ShardKV) ChangeShards(lastConfig* shardmaster.Config){
-//
-//	kv.SetChaFlag(true)
-//	chaPair:=kv.GetChaPair(lastConfig)
-//
-//	if _,isLeader:=kv.rf.GetState();isLeader{		//leader
-//		//rpc传送实际的数据
-//		kv.RealChaData(chaPair,lastConfig)
-//	}else{						//非leader
-//		kv.DelDBData(chaPair)			//只需要删除数据
-//	}
-//
-//	kv.SetCurConfig(lastConfig)
-//	kv.SetChaFlag(false)
-//}
-
-
-
-//获得最后一个config
-func (kv*ShardKV) FetLasCon(){
+func (kv *ShardKV) TryPollNewCfg() {
 
 	for {
 
-		DPrintf("%v（%v）'s curConfig is %v\n",kv.me,kv.gid,kv.GetCurConfig())
+		if _, isLeader := kv.rf.GetState(); isLeader {
 
-		//if kv.GetChaFlag() == true{		//如果正在交换数据
-			if _,isLeader:=kv.rf.GetState(); isLeader{			//只有每个group的leader才进行询问操作
+			if kv.IsNeedChangShard() == false{			//如果不存在还未处理的shards
+				tmpCurCfg := kv.GetCurConfig()
 
-				newConfig := kv.mck.Query(-1)
+				nextConfigNum:=tmpCurCfg.Num+1
+				nextConfig:=kv.mck.Query(nextConfigNum)		//下一个config
 
-				tmpCurConfig:=kv.GetCurConfig()
-				if newConfig.Num > tmpCurConfig.Num{ //configuration已经发生了改变
-
-					DPrintf("%v（%v）rec newConfig:%v\n",kv.me,kv.gid,newConfig)
-
-					kv.SetChaFlag(true)  //正在交换数据
-
-					res:=kv.PullShard(&newConfig)
-
-					// kv.PullShard(&newConfig)
-
-					kv.SetChaFlag(false)	//处理完成
-
-					if res.Err == OK{
-
-						kv.SetCurConfig(&newConfig)
-
-					}else{
-						//???...
-					}
+				if nextConfig.Num == nextConfigNum{		//如果确实是下一条config
+					kv.rf.Start(nextConfig)				//向底层raft系统发送Config
 				}
-				/*else if newConfig.Num == tmpCurConfig.Num{		//只发送config给follower
-					kv.SendConToFol(&newConfig)
-				}*/
-
-				//kv.mu.Unlock()
-				kv.SetChaFlag(false)	//处理完成
 			}
-		//}
+		}
+		time.Sleep(50*time.Millisecond)
+	}
+}
 
-		time.Sleep(80*time.Millisecond)
+
+func (kv *ShardKV) TryPullShard() {
+
+	for {
+		if _,isLeader:=kv.rf.GetState();isLeader{
+			if kv.IsNeedChangShard() == true{		//需要处理shard
+
+				var wait sync.WaitGroup
+				for shard, idx := range kv.comeInShards {		//shard->configIndex
+					wait.Add(1)
+
+					//处理每个shard
+					go func(shard int, cfg shardmaster.Config) {
+						defer wait.Done()
+						args := MigrateArgs{shard, cfg.Num}
+						gid := cfg.Shards[shard]
+						for _, server := range cfg.Groups[gid] {
+							srv := kv.make_end(server)
+							reply := MigrateReply{}
+							ok := srv.Call("ShardKV.ShardMigration", &args, &reply)
+							if  ok && reply.Err == OK {
+								kv.rf.Start(reply)				//向底层raft发送数据等信息
+							}
+						}
+					}(shard, kv.mck.Query(idx))
+				}
+
+				wait.Wait()
+			}
+		}
+
+		time.Sleep(50*time.Millisecond)
+	}
+}
+
+func (kv *ShardKV) ShardMigration(args *MigrateArgs, reply *MigrateReply) {
+	reply.Err, reply.Shard, reply.ConfigNum = ErrWrongLeader, args.Shard, args.ConfigNum
+	if _,isLeader := kv.rf.GetState(); !isLeader {return}
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+	reply.Err = ErrWrongGroup
+
+	//只处理比当前config小的情况
+	//比当前config大的，需要当前config稍后更新前移
+	if args.ConfigNum >= kv.curConfig.Num {
+		return
 	}
 
+	reply.Err,reply.ConfigNum, reply.Shard = OK, args.ConfigNum, args.Shard
+	reply.DB, reply.Cid2Seq = kv.deepCopyDBAndDedupMap(args.ConfigNum,args.Shard)
 }
 
-//设置标志
-func (kv*ShardKV) SetChaFlag(isChaing bool){
+func (kv *ShardKV) deepCopyDBAndDedupMap(config int,shard int) (map[string]string, map[int64]int) {
+	db2 := make(map[string]string)
+	cid2Seq2 := make(map[int64]int)
 
-	kv.mu.Lock()
-	kv.isChanging = isChaing		//打上标志
-	kv.mu.Unlock()
+	for k, v := range kv.toOutShards[config][shard] {
+		db2[k] = v
+	}
+
+	//???
+	for k, v := range kv.lastCmdIndexMap {
+		cid2Seq2[k] = v
+	}
+	return db2, cid2Seq2
 }
 
-//获取标志
-func (kv*ShardKV) GetChaFlag()bool{
 
+
+func (kv *ShardKV) UpdateDBWithMigrateData(migrationData MigrateReply) {
 	kv.mu.Lock()
-	isCha:=kv.isChanging
+	defer kv.mu.Unlock()
+
+	if migrationData.ConfigNum != kv.curConfig.Num-1 {
+		return
+	}
+
+	delete(kv.comeInShards, migrationData.Shard)		//在需要补充的shard中删除准备处理的shard
+
+	//this check is necessary, to avoid use  kv.cfg.Num-1 to update kv.cfg.Num's shard
+	if _, ok := kv.myShards[migrationData.Shard]; !ok {
+		kv.myShards[migrationData.Shard] = true
+
+		//混合数据部分
+		for k, v := range migrationData.DB {
+			kv.DataBase[k] = v
+		}
+
+		for k, v := range migrationData.Cid2Seq {
+			kv.lastCmdIndexMap[k] = Max(v,kv.lastCmdIndexMap[k])
+		}
+
+		//if _, ok := kv.garbages[migrationData.ConfigNum]; !ok {
+		//	kv.garbages[migrationData.ConfigNum] = make(map[int]bool)
+		//}
+		//kv.garbages[migrationData.ConfigNum][migrationData.Shard] = true
+	}
+}
+
+
+func (kv *ShardKV) UpdateInAndOutDataShard(cfg shardmaster.Config) {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+	if cfg.Num <= kv.curConfig.Num { //only consider newer config
+		return
+	}
+	oldCfg, toOutShard := kv.curConfig, kv.myShards
+	kv.myShards, kv.curConfig = make(map[int]bool), cfg
+
+	for shard, gid := range cfg.Shards {
+		if gid != kv.gid {
+			continue
+		}
+
+		if _, ok := toOutShard[shard]; ok || oldCfg.Num == 0 {
+			kv.myShards[shard] = true		//oldConfig中也具有的shard
+			delete(toOutShard, shard)		//删除属于自己的shard
+		} else {
+			kv.comeInShards[shard] = oldCfg.Num		//如果没有的话，记录oldConfig.num
+		}
+	}
+	if len(toOutShard) > 0 { // prepare data that needed migration
+		kv.toOutShards[oldCfg.Num] = make(map[int]map[string]string)
+		for shard := range toOutShard {
+			outDb := make(map[string]string)
+			for k, v := range kv.DataBase {
+				if key2shard(k) == shard {
+					outDb[k] = v
+					delete(kv.DataBase, k)
+				}
+			}
+			kv.toOutShards[oldCfg.Num][shard] = outDb
+		}
+	}
+}
+
+
+
+
+//是否需要交换shard
+func (kv*ShardKV) IsNeedChangShard()bool{
+	kv.mu.Lock()
+	numOfComInShard:=len(kv.comeInShards)
 	kv.mu.Unlock()
-	return isCha
+
+	if numOfComInShard > 0{
+		return true
+	}else{
+		return false
+	}
+}
+
+func Max(x, y int) int {
+	if x > y {
+		return x
+	}
+	return y
 }
 
 func (kv*ShardKV) GetCurConfig()shardmaster.Config{
@@ -241,11 +207,4 @@ func (kv*ShardKV) GetCurConfig()shardmaster.Config{
 	kv.mu.Unlock()
 	return tmpCurCon
 
-}
-
-//设置当前的config
-func (kv*ShardKV) SetCurConfig(curConfig* shardmaster.Config){
-	kv.mu.Lock()
-	kv.curConfig = *curConfig
-	kv.mu.Unlock()
 }
