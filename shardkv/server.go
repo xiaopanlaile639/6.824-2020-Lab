@@ -49,8 +49,8 @@ type ShardKV struct {
 //判断是否是当前group负责的shard
 func (kv *ShardKV)IsResForTheKey(key string)bool{
 
-	kv.mu.Lock()
-	defer kv.mu.Unlock()
+	//kv.mu.Lock()
+	//defer kv.mu.Unlock()
 
 	keyShardId:= key2shard(key)
 	if kv.myShards[keyShardId] == true{
@@ -83,11 +83,11 @@ func (kv *ShardKV) Get(args *GetArgs, reply *GetReply) {
 	DPrintf("%v(%v)'s curConfig's Num is %v\n",kv.me,kv.gid,kv.curConfig.Num)
 	kv.mu.Unlock()
 
-	if kv.IsResForTheKey(args.Key) == false{
-		reply.Err = ErrWrongGroup
-		DPrintf("%v is not res to the key(%v)\n",kv.me,args.Key)
-		return
-	}
+	//if kv.IsResForTheKey(args.Key) == false{
+	//	reply.Err = ErrWrongGroup
+	//	DPrintf("%v is not res to the key(%v)\n",kv.me,args.Key)
+	//	return
+	//}
 
 	//构造传给Raft的命令和参数
 	methodArgs := []string{args.Key}		//只有一个key参数
@@ -131,10 +131,10 @@ func (kv *ShardKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	DPrintf("%v(%v)'s curConfig's Num is %v\n",kv.me,kv.gid,kv.curConfig.Num)
 	kv.mu.Unlock()
 
-	if kv.IsResForTheKey(args.Key) == false{
-		reply.Err = ErrWrongGroup
-		return
-	}
+	//if kv.IsResForTheKey(args.Key) == false{
+	//	reply.Err = ErrWrongGroup
+	//	return
+	//}
 
 	methodArgs := []string{args.Key,args.Value}			//key,value两个参数
 	op:=Op{
@@ -202,6 +202,10 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister,
 	// call labgob.Register on structures you want
 	// Go's RPC library to marshall/unmarshall.
 	labgob.Register(Op{})
+
+	labgob.Register(MigrateArgs{})
+	labgob.Register(MigrateReply{})
+	labgob.Register(shardmaster.Config{})
 
 	kv := new(ShardKV)
 	kv.me = me

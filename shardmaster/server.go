@@ -41,11 +41,28 @@ type Op struct {
 
 }
 
-//初始化new config的编号
+//初始化new config
 func (sm *ShardMaster) InitNewConfig(newConfig * Config){
-	curConfigNum:=len(sm.configs)
-	newConfig.Num = curConfigNum
-	newConfig.Groups = nil
+
+	//lastCfg := sm.configs[len(sm.configs)-1]
+	//nextCfg := Config{Num: lastCfg.Num + 1, Shards: lastCfg.Shards, Groups: make(map[int][]string)}
+	//for gid, servers := range lastCfg.Groups {
+	//	nextCfg.Groups[gid] = append([]string{}, servers...)
+	//}
+	//	return nextCfg
+
+	lastConfig:=sm.GetLastConfig()
+	newConfig.Num = lastConfig.Num+1
+	newConfig.Shards = lastConfig.Shards
+	newConfig.Groups = make(map[int][]string)
+
+	for gid, servers := range lastConfig.Groups {
+		newConfig.Groups[gid] = append([]string{}, servers...)
+	}
+
+	//curConfigNum:=len(sm.configs)
+	//newConfig.Num = curConfigNum
+	//newConfig.Groups = nil
 }
 
 
@@ -163,6 +180,7 @@ func (sm *ShardMaster) Raft() *raft.Raft {
 //
 func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister) *ShardMaster {
 
+	//SetDebug()
 
 	sm := new(ShardMaster)
 	sm.me = me
@@ -192,3 +210,14 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister)
 	go sm.RecConfigMsg()			//在单独的一个go 线程中 接收信息
 	return sm
 }
+
+
+//func SetDebug(){
+//
+//	if len(os.Args)>1{
+//		Debug1,_=strconv.Atoi(os.Args[1])
+//	}else{
+//		Debug1 = 0
+//	}
+//
+//}

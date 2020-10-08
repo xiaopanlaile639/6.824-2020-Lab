@@ -621,8 +621,12 @@ func TestUnreliable3(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 	cfg.join(1)
 	time.Sleep(500 * time.Millisecond)
+
+	//fmt.Printf("test0:-------------------\n")
+
 	cfg.join(2)
 	time.Sleep(500 * time.Millisecond)
+//	fmt.Printf("test1:-------------------\n")
 	cfg.leave(0)
 	time.Sleep(500 * time.Millisecond)
 	cfg.leave(1)
@@ -630,6 +634,7 @@ func TestUnreliable3(t *testing.T) {
 	cfg.join(1)
 	cfg.join(0)
 
+//	fmt.Printf("test2:-------------------\n")
 	time.Sleep(2 * time.Second)
 
 	atomic.StoreInt32(&done, 1)

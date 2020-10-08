@@ -2,6 +2,7 @@ package shardmaster
 
 import (
 	"log"
+	"math"
 	"os"
 	"time"
 )
@@ -15,13 +16,15 @@ type Result struct {
 }
 
 //每个request的标识
+//这里的ConfigIndex其实就是reqIndex
 type  RequestId struct {
 	ClientId	int64
 	ConfigIndex	int
 }
 
-const Debug = 1
-//const Debug = 0
+//const Debug = 1
+const Debug = 0
+//var Debug1 int
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
 	if Debug > 0 {
@@ -48,8 +51,8 @@ func (sm *ShardMaster) ApplyConfigToSM(request Op)Result{
 	//DPrintf("in Apply Config: %v's curConfig Num is %v\n",sm.me,curConfig.Num)
 
 	//获得new group 信息,
-	lastServers:=sm.GetLastServers()
-	lastCopyServers:=DeepCopyMap(lastServers)
+	//lastServers:=sm.GetLastServers()
+	//lastCopyServers:=DeepCopyMap(lastServers)
 
 	configOkFlag :=false
 
@@ -60,23 +63,32 @@ func (sm *ShardMaster) ApplyConfigToSM(request Op)Result{
 		case JoinConfig:
 			joinArgs:= request.DisJoinArgs
 
-			newCurSers:=sm.JoinServers(lastCopyServers,joinArgs.Servers)			//当前的servers
+			//newCurSers:=sm.JoinServers(lastCopyServers,joinArgs.Servers)			//当前的servers
+			//curConfig.Groups = newCurSers
+			////填充 new config 的shard信息
+			//sm.AllocateShard(&curConfig)
 
-			curConfig.Groups = newCurSers
-
-			//填充 new config 的shard信息
-			sm.AllocateShard(&curConfig)
+			for gid,servers := range joinArgs.Servers {
+				newServers := make([]string, len(servers))
+				copy(newServers, servers)
+				curConfig.Groups[gid] = newServers
+				sm.rebalance(&curConfig,"Join",gid)
+			}
 
 			configOkFlag = true
 			break
 		case LeaveConfig:
 			leaveArgs:=request.DisLeaveArgs
-			newCurSers:=sm.LeaveServers(lastCopyServers,leaveArgs.GIDs)
 
-			curConfig.Groups = newCurSers
+			for _,gid := range leaveArgs.GIDs {
+				delete(curConfig.Groups,gid)
+				sm.rebalance(&curConfig,"Leave",gid)
+			}
 
-			//填充 new config 的shard信息
-			sm.AllocateShard(&curConfig)
+			//newCurSers:=sm.LeaveServers(lastCopyServers,leaveArgs.GIDs)
+			//curConfig.Groups = newCurSers
+			////填充 new config 的shard信息
+			//sm.AllocateShard(&curConfig)
 
 			configOkFlag = true
 			break
@@ -84,12 +96,15 @@ func (sm *ShardMaster) ApplyConfigToSM(request Op)Result{
 		case MoveConfig:
 			moveArgs:=request.DisMoveArgs
 
-			lastConfig:=sm.GetLastConfig()
 			//转移
-			lastConfig.Shards[moveArgs.Shard] = moveArgs.GID
+			curConfig.Shards[moveArgs.Shard] = moveArgs.GID
 
-			curConfig.Groups = lastServers		//server group 不变
-			curConfig.Shards = lastConfig.Shards	//更换为新的shards
+			//lastConfig:=sm.GetLastConfig()
+			//转移
+			//lastConfig.Shards[moveArgs.Shard] = moveArgs.GID
+			//curConfig.Groups = lastServers		//server group 不变
+		//	curConfig.Groups = lastCopyServers		//变成全新的copyServers
+		//	curConfig.Shards = lastConfig.Shards	//更换为新的shards
 
 			configOkFlag = true
 			break
@@ -127,8 +142,13 @@ func (sm *ShardMaster) ApplyConfigToSM(request Op)Result{
 
 		}
 	}else{				//已经失效的请求
-		res.Err = NotOK
-		res.WrongLeader = true
+
+		//if ok == false || _lastConfigIndex >= request.ConfigIndex{
+		//	DPrintf("%v:  _lastConfigIndex(%v) >=  request.ConfigIndex(%v),has already deal\n",sm.me,_lastConfigIndex,request.ConfigIndex)
+		//}
+		//
+		//res.Err = NotOK
+		//res.WrongLeader = true
 	}
 
 	return res
@@ -239,6 +259,8 @@ func (sm *ShardMaster) GetLastConfig()Config{
 	}
 
 }
+
+
 
 //给每个configuration分配shard
 func (sm *ShardMaster) AllocateShard(curConfig *Config){
@@ -364,3 +386,61 @@ func (sm *ShardMaster) ShowCurGroup(){
 
 }
 
+func (sm *ShardMaster) rebalance(cfg *Config, request string, gid int) {
+	shardsCount := sm.groupByGid(cfg) // gid -> shards
+	switch request {
+	case "Join":
+		avg := NShards / len(cfg.Groups)
+		for i := 0; i < avg; i++ {
+			maxGid := sm.getMaxShardGid(shardsCount)
+			cfg.Shards[shardsCount[maxGid][0]] = gid
+			shardsCount[maxGid] = shardsCount[maxGid][1:]
+		}
+	case "Leave":
+		shardsArray,exists := shardsCount[gid]
+		if !exists {return}
+		delete(shardsCount,gid)
+		if len(cfg.Groups) == 0 { // remove all gid
+			cfg.Shards = [NShards]int{}
+			return
+		}
+		for _,v := range shardsArray {
+			minGid := sm.getMinShardGid(shardsCount)
+			cfg.Shards[v] = minGid
+			shardsCount[minGid] = append(shardsCount[minGid], v)
+		}
+	}
+}
+
+func (sm *ShardMaster) groupByGid(cfg *Config) map[int][]int {
+	shardsCount := map[int][]int{}
+	for k,_ := range cfg.Groups {
+		shardsCount[k] = []int{}
+	}
+	for k, v := range cfg.Shards {
+		shardsCount[v] = append(shardsCount[v], k)
+	}
+	return shardsCount
+}
+func (sm *ShardMaster) getMaxShardGid(shardsCount map[int][]int) int {
+	max := -1
+	var gid int
+	for k, v := range shardsCount {
+		if max < len(v) {
+			max = len(v)
+			gid = k
+		}
+	}
+	return gid
+}
+func (sm *ShardMaster) getMinShardGid(shardsCount map[int][]int) int {
+	min := math.MaxInt32
+	var gid int
+	for k, v := range shardsCount {
+		if min > len(v) {
+			min = len(v)
+			gid = k
+		}
+	}
+	return gid
+}

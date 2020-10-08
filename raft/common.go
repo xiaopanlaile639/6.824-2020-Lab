@@ -125,6 +125,8 @@ type InstallSnapArgs struct {
 
 	Done		bool
 
+	SnapShotData  []byte			//用于保存快照的raw 数据
+
 }
 
 //install Snapshot的回复
@@ -140,10 +142,7 @@ type SnapShot struct {
 
 	LastAppliedIndex		int
 	LastAppliedTerm			int
-	//SnapshotIndex	int		//保存log的编号
-	//SnapshotTerm	int //最后一个log的term
 
-	//CurConfig	shardmaster.Config			//需要保存的config信息
 }
 
 

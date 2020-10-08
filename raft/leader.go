@@ -215,59 +215,58 @@ func (rf *Raft) RequestInstallSnapshot(server int ){
 
 		lastSnapshotByte:=rf.ReadSnapshot()
 
-		deInt,isOK:=rf.Deserialize(lastSnapshotByte,SnapshotType)	//反序列化
+		//deInt,isOK:=rf.Deserialize(lastSnapshotByte,SnapshotType)	//反序列化
 
-		if isOK {
+		//snapshot := deInt.(SnapShot) //强制转化为Snapshot类型
 
-			snapshot := deInt.(SnapShot) //强制转化为Snapshot类型
+		tmpLastIncIndex := rf.LastIncIndex
+		tmpLastIncTerm := rf.LastIncTerm
 
-			tmpLastIncIndex := rf.LastIncIndex
-			tmpLastIncTerm := rf.LastIncTerm
-
-			args := InstallSnapArgs{
-				Term:              rf.CurrentTerm,
-				LeaderId:          rf.me,
-				LastIncludedIndex: tmpLastIncIndex, //？？？需不需要加上这两个参数？？？
-				LastIncludedTerm:  tmpLastIncTerm,  //???
-				Snapshot:          snapshot,
-				Done:              false,
-			}
-
-			reply := InstallSnapReplys{}
-
-			rf.unlock("RequestInstallSnapshot lock")
-
-			ok:=rf.sendInstallSnapshot(server, &args, &reply)			//leader通过rpc发送snapshot
-
-			if ok{
-				rf.UpdateTerm(reply.Term)		//更新操作
-
-				if reply.Ok == false{			//提交失败
-					DPrintf("%v send snapshot to %v failed\n",rf.me,server)
-				}else {					//snapshot安装成功
-
-					rf.lock("RequestInstallSnapshot lock")
-
-					//更新nextIndex和matchIndex
-					rf.NextIndex[server] = args.LastIncludedIndex+1
-					rf.MatchIndex[server] = args.LastIncludedIndex
-
-					//rf.isInstallingSnapshot[server] = 0		//???
-
-					rf.unlock("RequestInstallSnapshot lock")
-
-					DPrintf("%v send snapshot to %v ok\n",rf.me,server)
-				}
-
-			}else{
-				////释放
-				//rf.lock("RequestInstallSnapshot lock")
-				//rf.isInstallingSnapshot[server] = 0
-				//rf.unlock("RequestInstallSnapshot lock")
-			}
-
-			rf.lock("RequestInstallSnapshot lock")		//进入加锁，退出函数时也需要加锁
+		args := InstallSnapArgs{
+			Term:              rf.CurrentTerm,
+			LeaderId:          rf.me,
+			LastIncludedIndex: tmpLastIncIndex, //？？？需不需要加上这两个参数？？？
+			LastIncludedTerm:  tmpLastIncTerm,  //???
+			//Snapshot:          snapshot,
+			Done:              false,
+			SnapShotData: lastSnapshotByte,
 		}
+
+		reply := InstallSnapReplys{}
+
+		rf.unlock("RequestInstallSnapshot lock")
+
+		ok:=rf.sendInstallSnapshot(server, &args, &reply)			//leader通过rpc发送snapshot
+
+		if ok{
+			rf.UpdateTerm(reply.Term)		//更新操作
+
+			if reply.Ok == false{			//提交失败
+				DPrintf("%v send snapshot to %v failed\n",rf.me,server)
+			}else {					//snapshot安装成功
+
+				rf.lock("RequestInstallSnapshot lock")
+
+				//更新nextIndex和matchIndex
+				rf.NextIndex[server] = args.LastIncludedIndex+1
+				rf.MatchIndex[server] = args.LastIncludedIndex
+
+				//rf.isInstallingSnapshot[server] = 0		//???
+
+				rf.unlock("RequestInstallSnapshot lock")
+
+				DPrintf("%v send snapshot to %v ok\n",rf.me,server)
+			}
+
+		}else{
+			////释放
+			//rf.lock("RequestInstallSnapshot lock")
+			//rf.isInstallingSnapshot[server] = 0
+			//rf.unlock("RequestInstallSnapshot lock")
+		}
+
+		rf.lock("RequestInstallSnapshot lock")		//进入加锁，退出函数时也需要加锁
+
 	}
 
 }

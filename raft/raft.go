@@ -283,7 +283,8 @@ func  (rf *Raft) RequestSnapshot(args *InstallSnapArgs, reply *InstallSnapReplys
 		rf.CommitIndex = args.LastIncludedIndex
 		rf.LastIncTerm = args.LastIncludedTerm
 
-		rf.SaveStateAndSnapshotWithLock(args.Snapshot)			//保存leader发来的快照
+		//rf.SaveStateAndSnapshotWithLock(args.Snapshot)			//保存leader发来的快照
+		rf.SaveStateAndSnapshotByteWithLock(args.LastIncludedIndex,args.LastIncludedTerm,args.SnapShotData)
 
 		rf.Applycond.Signal()			//释放信号
 

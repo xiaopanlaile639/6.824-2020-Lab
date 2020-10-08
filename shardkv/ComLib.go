@@ -24,20 +24,20 @@ const(
 )
 
 //shard从哪到哪
-type ChaShardPair struct{
-	fromGid int
-	toGid int
-	shard int 		//shard编号
-}
+//type ChaShardPair struct{
+//	fromGid int
+//	toGid int
+//	shard int 		//shard编号
+//}
 
-type ChaArgs struct {
-	ChaDB	map[string]string			//交换的数据
-
-}
-type ChaReply struct {
-	Err Err
-
-}
+//type ChaArgs struct {
+//	ChaDB	map[string]string			//交换的数据
+//
+//}
+//type ChaReply struct {
+//	Err Err
+//
+//}
 
 //返回结果
 type Result struct {
@@ -68,8 +68,8 @@ type Op struct {
 
 }
 
-const Debug = 1
-//const Debug = 0
+//const Debug = 1
+const Debug = 0
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
 	if Debug > 0 {
@@ -102,7 +102,7 @@ func (kv * ShardKV) SendCmdToRaft(clientId int64, cmdIndex int, op Op)Result{
 		//等待回复或者超时
 		select{
 		case <- time.After(time.Second):
-			DPrintf("%v time out\n",kv.me)
+			DPrintf("%v(%v):req(%v) time out\n",kv.me,kv.gid,reqId)
 			retRes.Err = TimeOut
 			retRes.RetVal=""
 			kv.RemoveClientChannel(reqId)			//超时后删除通道
@@ -135,9 +135,16 @@ func (kv *ShardKV) ApplyCmdToDB(request Op, commitIndex int,commitTerm int)Resul
 	kv.mu.Lock()
 	defer  kv.mu.Unlock()
 
+	key := request.MethodArgs[0]
+	if kv.IsResForTheKey(key) == false{
+		res.Err = ErrWrongGroup
+		DPrintf("%v(%v) is not res to the key(%v)\n",kv.me,kv.gid,key)
+		return res
+	}
+
 	switch request.Method {
 	case Get:
-		key := request.MethodArgs[0]
+		//key := request.MethodArgs[0]
 		val,ok:=kv.DataBase[key]
 		if ok {
 			res.RetVal = val
@@ -149,7 +156,7 @@ func (kv *ShardKV) ApplyCmdToDB(request Op, commitIndex int,commitTerm int)Resul
 	case Put:
 		lastCmdIndex,ok:=kv.lastCmdIndexMap[request.ClientId]
 		if !ok || (ok && lastCmdIndex <request.CmdIndex) {			//不存在或者(存在并且当前request的编号较大)
-			key := request.MethodArgs[0]
+			//key := request.MethodArgs[0]
 			val := request.MethodArgs[1]
 			kv.DataBase[key]  = val		//key不存在就插入，存在就覆盖其val
 
@@ -162,7 +169,7 @@ func (kv *ShardKV) ApplyCmdToDB(request Op, commitIndex int,commitTerm int)Resul
 	case Append:
 		lastCmdIndex,ok:=kv.lastCmdIndexMap[request.ClientId]
 		if !ok || (ok && lastCmdIndex <request.CmdIndex) {
-			key := request.MethodArgs[0]
+			//key := request.MethodArgs[0]
 			val := request.MethodArgs[1]
 
 			if retVal,ok:=kv.DataBase[key]; ok{		//存在对应的key
@@ -180,11 +187,18 @@ func (kv *ShardKV) ApplyCmdToDB(request Op, commitIndex int,commitTerm int)Resul
 		break
 	}
 
-	kv.ShowDB()
+	//kv.ShowDB()
 
-	kv.LastAppliedIndex = commitIndex			//记录最后一个应用到DB的log编号
-	kv.LastAppliedTerm = commitTerm				//记录最后一个应用到DB的log所在的term
+	//kv.LastAppliedIndex = commitIndex			//记录最后一个应用到DB的log编号
+	//kv.LastAppliedTerm = commitTerm				//记录最后一个应用到DB的log所在的term
 	return res
+}
+
+func (kv *ShardKV) UpdateAppIndexAndTerm(index,term int){
+	kv.mu.Lock()
+	defer  kv.mu.Unlock()
+
+	kv.LastAppliedIndex,kv.LastAppliedTerm = index,term
 }
 
 //专门接受raft系统的返回信息，通过通道
@@ -197,11 +211,11 @@ func (kv *ShardKV) RecApplyMsg(){
 
 		if AppMsg.CommandValid { //如果是普通apply 消息
 
-			if cfg, ok := AppMsg.Command.(shardmaster.Config); ok { //如果是config消息
+			if cfg, ok1 := AppMsg.Command.(shardmaster.Config); ok1 { //如果是config消息
 				kv.UpdateInAndOutDataShard(cfg) //更新shard相关信息
-			} else if migrationData, ok := AppMsg.Command.(MigrateReply); ok { //如果是数据消息
+			} else if migrationData, ok2 := AppMsg.Command.(MigrateReply); ok2 { //如果是数据消息
 				kv.UpdateDBWithMigrateData(migrationData)
-			} else if op := AppMsg.Command.(Op); ok { //如果接口类型强制转化为Op类型
+			} else if op,ok3 := AppMsg.Command.(Op); ok3 { //如果接口类型强制转化为Op类型
 
 				res := kv.ApplyCmdToDB(op, AppMsg.CommandIndex, AppMsg.CommandTerm) //将操作具体应用到DB中
 
@@ -220,24 +234,39 @@ func (kv *ShardKV) RecApplyMsg(){
 					}
 				}
 
-				go kv.SaveSnapshot() //保存快照
+				//go kv.SaveSnapshot() //保存快照
 
-			} else { //snapshot 消息
-				kv.ReadSnapshot() //恢复快照
 			}
+
+			if kv.NeedSnapshot() {
+				go kv.SaveSnapshot(AppMsg.CommandIndex,AppMsg.CommandTerm)
+			}
+
+		//	go kv.SaveSnapshot(AppMsg.CommandIndex,AppMsg.CommandTerm)
+			//kv.UpdateAppIndexAndTerm(AppMsg.CommandIndex,AppMsg.CommandTerm)
+
+			//if kv.NeedSnapshot(){
+			//	go kv.SaveSnapshot(AppMsg.CommandIndex,AppMsg.CommandTerm)
+			//}
+
+		}else { //snapshot 消息
+			kv.ReadSnapshot() //恢复快照
 		}
 	}
 }
 
 //处理snapshot,若snapshot达到限额
-func (kv *ShardKV) SaveSnapshot(){
+func (kv *ShardKV) SaveSnapshot(lastAppIndex,lastAppTerm int){
 
 	kv.mu.Lock()
 
-	raftLogSize:=kv.rf.GetRaftStateSize()
-	if kv.maxraftstate != -1 && raftLogSize >= kv.maxraftstate{
+	kv.LastAppliedIndex,kv.LastAppliedTerm = lastAppIndex,lastAppTerm		//更新index和term信息
 
-		DPrintf("%v's log size(%v) reach to maxsize(%v)\n",kv.me,raftLogSize,kv.maxraftstate)
+	raftLogSize:=kv.rf.GetRaftStateSize()
+
+	//if kv.maxraftstate != -1 && raftLogSize >= kv.maxraftstate{
+		DPrintf("%v(%v)'s log size(%v) reach to maxsize(%v),lastAppIndex(%v) vs lastCurIndex(%v)\n",
+			kv.me,kv.gid,raftLogSize,kv.maxraftstate,kv.LastAppliedIndex,kv.rf.GetLastLogEntry().Index)
 
 		w := new(bytes.Buffer)
 		e := labgob.NewEncoder(w)
@@ -247,14 +276,50 @@ func (kv *ShardKV) SaveSnapshot(){
 		e.Encode(kv.toOutShards)
 		e.Encode(kv.myShards)
 		e.Encode(kv.curConfig)
+
+		e.Encode(kv.LastAppliedIndex)
+		e.Encode(kv.LastAppliedTerm)
+
+		//DPrintf("%v(%v)encode res:%v",kv.me,kv.gid,err)
 		//e.Encode(kv.garbages)
 
 		kv.rf.SaveStateAndSnapshotByte(kv.LastAppliedIndex,kv.LastAppliedTerm,w.Bytes())
-	}
+
+		DPrintf("%v(%v) after saveSnapshot,it's size is(%v)\n",kv.me,kv.gid,kv.rf.GetRaftStateSize())
+	//}
 
 	kv.mu.Unlock()
 
 }
+
+////处理snapshot,若snapshot达到限额
+//func (kv *ShardKV) SaveSnapshot1(lastAppIndex,lastAppTerm int){
+//
+//	kv.mu.Lock()
+//
+//	kv.LastAppliedIndex,kv.LastAppliedTerm = lastAppIndex,lastAppTerm
+//
+//	w := new(bytes.Buffer)
+//	e := labgob.NewEncoder(w)
+//	e.Encode(kv.DataBase)
+//	e.Encode(kv.lastCmdIndexMap)
+//	e.Encode(kv.comeInShards)
+//	e.Encode(kv.toOutShards)
+//	e.Encode(kv.myShards)
+//	e.Encode(kv.curConfig)
+//
+//	e.Encode(kv.LastAppliedIndex)
+//	e.Encode(kv.LastAppliedTerm)
+//
+//	//e.Encode(kv.garbages)
+//
+//	kv.rf.SaveStateAndSnapshotByte(kv.LastAppliedIndex,kv.LastAppliedTerm,w.Bytes())
+//
+//	DPrintf("%v(%v) after saveSnapshot,it's size is(%v)\n",kv.me,kv.gid,kv.rf.GetRaftStateSize())
+//
+//	kv.mu.Unlock()
+//
+//}
 
 func (kv* ShardKV) ReadSnapshot()bool{
 
@@ -276,18 +341,42 @@ func (kv* ShardKV) ReadSnapshot()bool{
 	var comeInShards map[int]int
 	var myShards	map[int]bool
 	var cfg shardmaster.Config
+	var lastAppIndex int
+	var lastAppTerm int
 
 	if d.Decode(&db) != nil || d.Decode(&cid2Seq) != nil || d.Decode(&comeInShards) != nil ||
-		d.Decode(&toOutShards) != nil || d.Decode(&myShards) != nil || d.Decode(&cfg) != nil {
-		log.Fatalf("readSnapShot ERROR for server %v", kv.me)
+		d.Decode(&toOutShards) != nil || d.Decode(&myShards) != nil || d.Decode(&cfg) != nil ||
+		d.Decode(&lastAppIndex) != nil || d.Decode(&lastAppTerm) != nil{
+		log.Fatalf("readSnapShot ERROR for server %v（%v）", kv.me,kv.gid)
 		return false
 	} else {
 		kv.DataBase, kv.lastCmdIndexMap, kv.curConfig = db, cid2Seq, cfg
 		kv.toOutShards, kv.comeInShards, kv.myShards = toOutShards,comeInShards,myShards
+		kv.LastAppliedIndex,kv.LastAppliedTerm = lastAppIndex,lastAppTerm
 	}
 
-	DPrintf("%v read snapshot,it 's lastIncIndex:%v",kv.me,kv.LastAppliedIndex)
+	DPrintf("%v read snapshot,it 's LastAppliedIndex:%v",kv.me,kv.LastAppliedIndex)
 	return true
+}
+
+func (kv* ShardKV) NeedSnapshot()bool{
+
+	threshold := 10
+	return kv.maxraftstate > 0 &&
+		kv.maxraftstate - kv.rf.GetRaftStateSize() < kv.maxraftstate/threshold
+
+	//kv.mu.Lock()
+	//defer kv.mu.Unlock()
+	//
+	//needSnapShot:=false
+	//raftLogSize:=kv.rf.GetRaftStateSize()
+	//
+	//if kv.maxraftstate != -1 && raftLogSize >= kv.maxraftstate{
+	//	DPrintf("%v(%v)'s log size(%v) reach to maxsize(%v)\n",kv.me,kv.gid,raftLogSize,kv.maxraftstate)
+	//	needSnapShot = true
+	//}
+	//
+	//return needSnapShot
 }
 
 
